@@ -1,7 +1,6 @@
 {
   "version": 2,
   "name": "journey-ai",
-  "public": true,
   "outputDirectory": "public",
   "cleanUrls": true,
   "rewrites": [
