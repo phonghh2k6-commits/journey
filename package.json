@@ -2,11 +2,10 @@
   "name": "journey-ai-web",
   "version": "1.0.0",
   "description": "JOURNEY AI — Luxury AI Travel Companion Web Application (Khám phá Thế giới. Lắng nghe Câu chuyện.)",
-  "main": "server.js",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "build": "echo 'Static web assets ready in public/'",
+    "build": "mkdir -p public/images images && cp -f app/src/main/res/drawable/img_*.jpg public/images/ 2>/dev/null || true && cp -rf public/* . 2>/dev/null || true",
     "lint": "node --check server.js && node --check public/app.js"
   },
   "engines": {

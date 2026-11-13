@@ -26,30 +26,30 @@ const MIME_TYPES = {
 
 // Ensure public/images exists and copy generated drawable images if present
 const publicImagesDir = path.join(PUBLIC_DIR, 'images');
-if (!fs.existsSync(publicImagesDir)) {
-  fs.mkdirSync(publicImagesDir, { recursive: true });
-}
-const imageFiles = [
-  'img_hero_halong_bay.jpg',
-  'img_hoian_lanterns.jpg',
-  'img_hanoi_temple.jpg',
-  'img_sapa_terraces.jpg',
-  'img_launcher_compass.jpg'
-];
-for (const img of imageFiles) {
-  const src = path.join(DRAWABLE_DIR, img);
-  const dest = path.join(publicImagesDir, img);
-  if (fs.existsSync(src) && !fs.existsSync(dest)) {
-    try {
+try {
+  if (!fs.existsSync(publicImagesDir)) {
+    fs.mkdirSync(publicImagesDir, { recursive: true });
+  }
+  const imageFiles = [
+    'img_hero_halong_bay.jpg',
+    'img_hoian_lanterns.jpg',
+    'img_hanoi_temple.jpg',
+    'img_sapa_terraces.jpg',
+    'img_launcher_compass.jpg'
+  ];
+  for (const img of imageFiles) {
+    const src = path.join(DRAWABLE_DIR, img);
+    const dest = path.join(publicImagesDir, img);
+    if (fs.existsSync(src) && !fs.existsSync(dest)) {
       fs.copyFileSync(src, dest);
-    } catch (e) {
-      // ignore copy error
     }
   }
+} catch (e) {
+  // Ignore read-only filesystem in serverless environments
 }
 
-const server = http.createServer((req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+function handleRequest(req, res) {
+  const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   let pathname = decodeURIComponent(parsedUrl.pathname);
 
   if (pathname === '/api/health') {
@@ -63,7 +63,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Direct APK Download endpoint for Android users
+  if (pathname === '/favicon.ico' || pathname === '/favicon.png') {
+    const iconPath = path.join(PUBLIC_DIR, 'images', 'img_launcher_compass.jpg');
+    if (fs.existsSync(iconPath)) {
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+      fs.createReadStream(iconPath).pipe(res);
+      return;
+    }
+  }
+
   if (pathname === '/download/journey-ai.apk') {
     const apkFile = APK_PATHS.find((p) => fs.existsSync(p));
     if (apkFile) {
@@ -92,7 +100,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Fallback to drawable directory for images if requested under /images/
   if (!fs.existsSync(filePath) && pathname.startsWith('/images/')) {
     const baseName = path.basename(pathname);
     const drawableFallback = path.join(DRAWABLE_DIR, baseName);
@@ -124,8 +131,15 @@ const server = http.createServer((req, res) => {
     });
     fs.createReadStream(filePath).pipe(res);
   });
-});
+}
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Journey AI Web & Distribution Hub listening on http://0.0.0.0:${PORT}`);
-});
+// Export handler for Vercel Serverless Functions ([f] /)
+module.exports = handleRequest;
+
+// Start standalone HTTP server when running locally / in AI Studio container
+if (!process.env.VERCEL) {
+  const server = http.createServer(handleRequest);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Journey AI Web & Distribution Hub listening on http://0.0.0.0:${PORT}`);
+  });
+}

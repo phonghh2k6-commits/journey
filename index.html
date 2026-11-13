@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light" data-font-scale="medium">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Journey AI" />
+  <link rel="apple-touch-icon" href="images/img_launcher_compass.jpg" />
+  <link rel="manifest" href="manifest.json" />
+  <title>JOURNEY AI — Khám phá Thế giới. Lắng nghe Câu chuyện.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="web-app-shell" id="appShell">
+    <!-- Top Header Bar (Clean Web App Header like VitaPulse) -->
+    <header class="top-header">
+      <div class="brand-cluster" onclick="window.journeyApp.switchTab('home')">
+        <div class="brand-logo-circle" title="Journey AI">🧭</div>
+        <div class="brand-titles">
+          <div class="brand-row">
+            <span class="brand-name" id="headerBrandName">Journey AI</span>
+            <span class="badge-mine" id="headerBadgeMine">Của tôi</span>
+          </div>
+          <span class="user-subtitle" id="headerUserSubtitle">Minh Nguyễn · Journey+</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn-ai-scan-pill" onclick="window.journeyApp.openIosGuideModal()" id="btnIosGuide" title="Tải ứng dụng cho iOS, Android & Chia sẻ mã QR">
+          <span>📲</span>
+          <span id="labelIosGuide">Tải & Chia Sẻ</span>
+        </button>
+
+        <button class="btn-ai-scan-pill" onclick="window.journeyApp.switchTab('discover')" id="btnHeaderScan">
+          <span>✨</span>
+          <span id="labelHeaderScan">Quét AI</span>
+        </button>
+
+        <button class="btn-icon-circle" onclick="window.journeyApp.toggleTheme()" id="btnThemeToggle" title="Chuyển chế độ Sáng / Tối">
+          🌙
+        </button>
+
+        <button class="btn-avatar-pill" onclick="window.journeyApp.togglePopover()" id="btnAvatarPopover" aria-label="Hồ sơ & Cài đặt nhanh">
+          <span class="avatar-circle">MN</span>
+          <span class="avatar-chevron">⌄</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Popover Backdrop & Floating Quick Settings / Profile Card (VitaPulse Style) -->
+    <div class="popover-backdrop" id="popoverBackdrop" onclick="window.journeyApp.closePopover()"></div>
+    <aside class="quick-profile-popover" id="quickProfilePopover" aria-label="Bảng điều khiển nhanh">
+      <div class="popover-user-header">
+        <div class="popover-avatar-lg">MN</div>
+        <div>
+          <div class="popover-user-name">Minh Nguyễn</div>
+          <div class="popover-user-meta" id="popoverUserMeta">Nhà thám hiểm Văn hóa · 12 Quốc gia · Hạng Journey+</div>
+        </div>
+      </div>
+
+      <!-- Minimalist View Mode -->
+      <div class="popover-setting-box">
+        <div class="popover-setting-row">
+          <div>
+            <div class="popover-setting-title">
+              <span>👁️</span>
+              <span id="lblMinimalMode">Chế độ xem tối giản</span>
+            </div>
+            <div class="popover-setting-desc" id="descMinimalMode">
+              Chỉ giữ lại Điểm đến chính, Thuyết minh âm thanh & Quét AI với nút bấm cỡ lớn.
+            </div>
+          </div>
+          <button class="btn-pill-toggle" id="btnToggleMinimal" onclick="window.journeyApp.toggleMinimalMode()">
+            Đang tắt
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Voice Confirmation / Narration -->
+      <div class="popover-setting-box">
+        <div class="popover-setting-row">
+          <div>
+            <div class="popover-setting-title">
+              <span>🔊</span>
+              <span id="lblVoiceConfirm">Giọng nói thuyết minh AI</span>
+            </div>
+            <div class="popover-setting-desc" id="descVoiceConfirm">
+              Tự động đọc thuyết minh lịch sử & văn hóa khi nhận diện địa danh hoặc mở điểm đến.
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;">
+            <button class="btn-pill-toggle on" id="btnToggleVoice" onclick="window.journeyApp.toggleVoiceNarration()">
+              Đang bật
+            </button>
+            <button class="btn-pill-sub" id="btnTestVoice" onclick="window.journeyApp.speakSample()">
+              Nghe thử
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display Font Scale -->
+      <div class="popover-setting-box">
+        <div class="popover-setting-title">
+          <span>🇹</span>
+          <span id="lblFontSize">Cỡ chữ hiển thị</span>
+        </div>
+        <div class="segmented-3">
+          <button class="seg-btn active" id="btnFontMedium" onclick="window.journeyApp.setFontScale('medium')">Vừa</button>
+          <button class="seg-btn" id="btnFontLarge" onclick="window.journeyApp.setFontScale('large')">Lớn</button>
+          <button class="seg-btn" id="btnFontXLarge" onclick="window.journeyApp.setFontScale('xlarge')">Rất lớn</button>
+        </div>
+      </div>
+
+      <!-- Theme & Language Quick Switchers -->
+      <div class="segmented-2">
+        <button class="seg-btn active" id="btnPopoverLight" onclick="window.journeyApp.setTheme('light')">☀️ Sáng (Ivory)</button>
+        <button class="seg-btn" id="btnPopoverDark" onclick="window.journeyApp.setTheme('dark')">🌙 Tối (Midnight)</button>
+      </div>
+      <div class="segmented-2">
+        <button class="seg-btn active" id="btnLangVi" onclick="window.journeyApp.setLanguage('vi')">🇻🇳 Tiếng Việt</button>
+        <button class="seg-btn" id="btnLangEn" onclick="window.journeyApp.setLanguage('en')">🇬🇧 English</button>
+      </div>
+
+      <!-- Quick Navigation Links -->
+      <div class="popover-link-list">
+        <button class="popover-link-item" onclick="window.journeyApp.openSavedPlacesFromPopover()">
+          <span>🔖</span>
+          <span id="linkSavedPlaces">Hồ sơ & Địa điểm đã lưu (4)</span>
+        </button>
+        <button class="popover-link-item" onclick="window.journeyApp.openAiPlannerModal()">
+          <span>🗺️</span>
+          <span id="linkAiPlanner">Cài đặt Lịch trình & Thông báo thông minh</span>
+        </button>
+        <button class="popover-link-item" onclick="window.journeyApp.openAllScreensModal()">
+          <span>🛡️</span>
+          <span id="linkPrivacyScreens">Quyền riêng tư, Ngoại tuyến & Danh mục 34 Màn hình</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Viewport Populated with Hero Banner & Trending Places Grid -->
+    <main class="main-content" id="mainViewport">
+      <!-- Hero Banner Component -->
+      <section class="hero-banner" aria-label="Hero Banner">
+        <img
+          src="images/img_hero_halong_bay.jpg"
+          alt="Vịnh Hạ Long — Ha Long Bay"
+          class="hero-banner-img"
+        />
+        <div class="hero-eyebrow">🧭 ĐIỂM ĐẾN NỔI BẬT HÔM NAY · UNESCO WORLD HERITAGE</div>
+        <h1 class="hero-title serif-title">Vịnh Hạ Long — Huyền Thoại Đá Giữa Biển Ngọc</h1>
+        <p class="hero-subtitle">
+          Khám phá Thế giới. Lắng nghe Câu chuyện. Trải nghiệm thuyết minh âm thanh AI không gian 3D, nhận diện di sản qua ống kính thời gian thực và lưu giữ nhật ký hành trình 4K.
+        </p>
+        <div class="hero-cta-row">
+          <button class="hero-cta-button" onclick="window.journeyApp.openDestinationModal('halong')">
+            <span>🎧</span>
+            <span>Khám phá &amp; Nghe câu chuyện</span>
+          </button>
+          <button class="btn-glass" onclick="window.journeyApp.switchTab('discover')">
+            <span>📷</span>
+            <span>Mở Ống kính Nhận diện AI</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Trending Places Grid Section -->
+      <section class="trending-places-section" aria-label="Trending Places">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title serif-title">Địa Điểm Xu Hướng — Trending Places</h2>
+            <p style="font-size:0.86rem;color:var(--text-secondary);">
+              Những điểm đến di sản được cộng đồng Journey AI quét ống kính và nghe thuyết minh nhiều nhất tuần này
+            </p>
+          </div>
+          <button class="section-link" onclick="window.journeyApp.switchTab('explore')">
+            Xem trên Bản đồ tương tác →
+          </button>
+        </div>
+
+        <div class="trending-places-grid">
+          <!-- Card 1: Ha Long Bay -->
+          <article class="trending-place-card" onclick="window.journeyApp.openDestinationModal('halong')">
+            <div class="place-card-img-wrap">
+              <img src="images/img_hero_halong_bay.jpg" alt="Vịnh Hạ Long" class="place-card-img" />
+              <span class="place-badge-top">Di sản UNESCO</span>
+              <button class="place-save-btn saved" onclick="event.stopPropagation(); window.journeyApp.toggleSave('halong')" title="Lưu địa điểm">🔖</button>
+            </div>
+            <div class="place-card-body">
+              <div class="place-meta-row">
+                <span class="trending-rank-pill">🔥 #01 TRENDING</span>
+                <span class="mono-text">★ 4.9 · 165 km</span>
+              </div>
+              <h3 class="place-title serif-title">Vịnh Hạ Long</h3>
+              <p class="place-desc">Hơn 1.600 đảo đá vôi kỳ vĩ vươn lên từ làn nước ngọc lục bảo, lưu giữ trầm tích địa chất 500 triệu năm và truyền thuyết Rồng thiêng hạ giới.</p>
+              <div class="place-footer">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--accent-sage);">🎧 Thuyết minh 4 phút</span>
+                <button class="btn-pill-toggle" onclick="event.stopPropagation(); window.journeyApp.playDestinationAudio('halong')">🔊 Nghe ngay</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 2: Hoi An Ancient Town -->
+          <article class="trending-place-card" onclick="window.journeyApp.openDestinationModal('hoian')">
+            <div class="place-card-img-wrap">
+              <img src="images/img_hoian_lanterns.jpg" alt="Phố Cổ Hội An" class="place-card-img" />
+              <span class="place-badge-top">Thương cảng Cổ</span>
+              <button class="place-save-btn saved" onclick="event.stopPropagation(); window.journeyApp.toggleSave('hoian')" title="Lưu địa điểm">🔖</button>
+            </div>
+            <div class="place-card-body">
+              <div class="place-meta-row">
+                <span class="trending-rank-pill">🔥 #02 TRENDING</span>
+                <span class="mono-text">★ 4.9 · 2.4 km</span>
+              </div>
+              <h3 class="place-title serif-title">Phố Cổ Hội An</h3>
+              <p class="place-desc">Thương cảng quốc tế phồn hoa thế kỷ XVI–XVII với những dãy nhà tường vàng cổ kính, Chùa Cầu trăm tuổi và sông Hoài rực rỡ đèn lồng lụa.</p>
+              <div class="place-footer">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--accent-sage);">🎧 Thuyết minh 5 phút</span>
+                <button class="btn-pill-toggle" onclick="event.stopPropagation(); window.journeyApp.playDestinationAudio('hoian')">🔊 Nghe ngay</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 3: Temple of Literature -->
+          <article class="trending-place-card" onclick="window.journeyApp.openDestinationModal('hanoi_temple')">
+            <div class="place-card-img-wrap">
+              <img src="images/img_hanoi_temple.jpg" alt="Văn Miếu – Quốc Tử Giám" class="place-card-img" />
+              <span class="place-badge-top">Đại học Đầu tiên</span>
+              <button class="place-save-btn saved" onclick="event.stopPropagation(); window.journeyApp.toggleSave('hanoi_temple')" title="Lưu địa điểm">🔖</button>
+            </div>
+            <div class="place-card-body">
+              <div class="place-meta-row">
+                <span class="trending-rank-pill">🔥 #03 TRENDING</span>
+                <span class="mono-text">★ 4.8 · 1.1 km</span>
+              </div>
+              <h3 class="place-title serif-title">Văn Miếu – Quốc Tử Giám</h3>
+              <p class="place-desc">Được xây dựng năm 1070 dưới triều vua Lý Thánh Tông, biểu tượng ngàn năm của truyền thống hiếu học với Khuê Văn Các và 82 bia Tiến sĩ.</p>
+              <div class="place-footer">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--accent-sage);">🎧 Thuyết minh 6 phút</span>
+                <button class="btn-pill-toggle" onclick="event.stopPropagation(); window.journeyApp.playDestinationAudio('hanoi_temple')">🔊 Nghe ngay</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 4: Sapa & Mu Cang Chai Terraces -->
+          <article class="trending-place-card" onclick="window.journeyApp.openDestinationModal('sapa')">
+            <div class="place-card-img-wrap">
+              <img src="images/img_sapa_terraces.jpg" alt="Ruộng Bậc Thang Mù Cang Chải & Sa Pa" class="place-card-img" />
+              <span class="place-badge-top">Kiệt tác Vùng cao</span>
+              <button class="place-save-btn saved" onclick="event.stopPropagation(); window.journeyApp.toggleSave('sapa')" title="Lưu địa điểm">🔖</button>
+            </div>
+            <div class="place-card-body">
+              <div class="place-meta-row">
+                <span class="trending-rank-pill">🔥 #04 TRENDING</span>
+                <span class="mono-text">★ 4.9 · 290 km</span>
+              </div>
+              <h3 class="place-title serif-title">Ruộng Bậc Thang Mù Cang Chải &amp; Sa Pa</h3>
+              <p class="place-desc">Những nấc thang vàng óng chạm mây do bàn tay người H’Mông và Dao kiến tạo suốt hàng thế kỷ trên sườn núi Hoàng Liên Sơn hùng vĩ.</p>
+              <div class="place-footer">
+                <span style="font-size:0.78rem;font-weight:700;color:var(--accent-sage);">🎧 Thuyết minh 4 phút</span>
+                <button class="btn-pill-toggle" onclick="event.stopPropagation(); window.journeyApp.playDestinationAudio('sapa')">🔊 Nghe ngay</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Live Interactive Explore Map Section (.explore-section) -->
+      <section class="explore-section" id="exploreMapSection" aria-label="Interactive Explore Map">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title serif-title">Bản Đồ Tương Tác Địa Điểm Xu Hướng — Live Explore Map</h2>
+            <p style="font-size:0.86rem;color:var(--text-secondary);">
+              Khám phá trực tiếp vị trí địa lý, lộ trình di sản và chạm vào từng ghim trên bản đồ Leaflet để nghe thuyết minh AI
+            </p>
+          </div>
+          <button class="btn-gold" onclick="window.journeyApp.fitAllTrendingMarkers()">
+            🗺️ Xem toàn bộ lộ trình Việt Nam
+          </button>
+        </div>
+
+        <div class="leaflet-explore-wrapper">
+          <div id="leafletExploreMap" class="leaflet-explore-map" role="region" aria-label="Leaflet Trending Places Map"></div>
+          <div class="explore-map-controls">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="chip-btn active" onclick="window.journeyApp.flyToTrendingPlace('halong')">📍 #01 Vịnh Hạ Long</button>
+              <button class="chip-btn" onclick="window.journeyApp.flyToTrendingPlace('hoian')">📍 #02 Phố Cổ Hội An</button>
+              <button class="chip-btn" onclick="window.journeyApp.flyToTrendingPlace('hanoi_temple')">📍 #03 Văn Miếu Hà Nội</button>
+              <button class="chip-btn" onclick="window.journeyApp.flyToTrendingPlace('sapa')">📍 #04 Mù Cang Chải &amp; Sa Pa</button>
+            </div>
+            <span class="mono-text" style="font-size:0.78rem;color:var(--text-secondary);">Leaflet Live GIS · 4 Trending Heritage Pins</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Floating Quick AI Concierge / Create Button -->
+    <button class="fab-ai-assistant" onclick="window.journeyApp.openAiChatModal()" title="Trợ lý Du lịch AI">
+      💬
+    </button>
+
+    <!-- Bottom 5-Tab Navigation Bar -->
+    <nav class="bottom-nav" aria-label="Điều hướng chính">
+      <button class="nav-tab active" data-tab="home" onclick="window.journeyApp.switchTab('home')">
+        <span class="nav-tab-icon">🏛️</span>
+        <span class="nav-label" id="navHome">Trang chủ</span>
+      </button>
+      <button class="nav-tab" data-tab="explore" onclick="window.journeyApp.switchTab('explore')">
+        <span class="nav-tab-icon">🗺️</span>
+        <span class="nav-label" id="navExplore">Khám phá</span>
+      </button>
+      <button class="nav-tab" data-tab="discover" onclick="window.journeyApp.switchTab('discover')">
+        <span class="nav-tab-icon">📷</span>
+        <span class="nav-label" id="navDiscover">Ống kính AI</span>
+      </button>
+      <button class="nav-tab" data-tab="journal" onclick="window.journeyApp.switchTab('journal')">
+        <span class="nav-tab-icon">📖</span>
+        <span class="nav-label" id="navJournal">Nhật ký</span>
+      </button>
+      <button class="nav-tab" data-tab="profile" onclick="window.journeyApp.switchTab('profile')">
+        <span class="nav-tab-icon">👤</span>
+        <span class="nav-label" id="navProfile">Hồ sơ</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Universal Modal Overlay -->
+  <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) window.journeyApp.closeModal()">
+    <div class="modal-card" id="modalContent"></div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-banner" id="toastBanner"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
