@@ -33,27 +33,35 @@ enum class ViewportPreset(val widthDp: Int, val label: String) {
 enum class PrimaryTab(
     val id: String,
     val labelEn: String,
-    val labelVi: String,
-    val defaultScreen: JourneyScreenId
+    val labelVi: String
 ) {
-    HOME("NAV_HOME", "Home", "Trang chủ", JourneyScreenId.B1_HOME_DASHBOARD),
-    EXPLORE("NAV_EXPLORE", "Explore", "Khám phá", JourneyScreenId.C1_EXPLORE_MAP),
-    DISCOVER("NAV_DISCOVER", "Discover", "Ống kính AI", JourneyScreenId.D1_AI_CAMERA),
-    JOURNAL("NAV_JOURNAL", "Journal", "Nhật ký", JourneyScreenId.F1_JOURNAL_HOME),
-    PROFILE("NAV_PROFILE", "Profile", "Hồ sơ", JourneyScreenId.I1_PROFILE)
+    HOME("NAV_HOME", "Home", "Trang chủ"),
+    EXPLORE("NAV_EXPLORE", "Visited", "Khám phá"),
+    DISCOVER("NAV_DISCOVER", "Camera", "Ống kính"),
+    JOURNAL("NAV_JOURNAL", "Check-in", "Nhật ký"),
+    PROFILE("NAV_PROFILE", "Profile", "Hồ sơ");
+
+    val defaultScreen: JourneyScreenId
+        get() = when (this) {
+            HOME -> JourneyScreenId.B1_HOME_DASHBOARD
+            EXPLORE -> JourneyScreenId.C1_EXPLORE_MAP
+            DISCOVER -> JourneyScreenId.D1_AI_CAMERA
+            JOURNAL -> JourneyScreenId.F1_JOURNAL_HOME
+            PROFILE -> JourneyScreenId.I1_PROFILE
+        }
 }
 
 enum class ScreenGroup(val code: String, val titleEn: String, val titleVi: String) {
     DESIGN_SYSTEM("PHASE 1", "Design System & Handoff", "Hệ thống Thiết kế & Bàn giao"),
     GROUP_A("GROUP A", "Onboarding & Auth", "Giới thiệu & Xác thực"),
-    GROUP_B("GROUP B", "Home & Search", "Trang chủ & Tìm kiếm"),
-    GROUP_C("GROUP C", "Explore & Map", "Bản đồ & Điểm đến"),
-    GROUP_D("GROUP D", "AI Visual Discovery", "Nhận diện Thị giác AI"),
+    GROUP_B("GROUP B", "Home & Social Feed", "Trang chủ & Bảng tin"),
+    GROUP_C("GROUP C", "Visited Places Map", "Bản đồ Nơi đã đến"),
+    GROUP_D("GROUP D", "Locket Camera", "Ống kính Chụp ảnh"),
     GROUP_E("GROUP E", "AI Assistant & Voice", "Trợ lý AI & Giọng nói"),
-    GROUP_F("GROUP F", "Travel Journal", "Nhật ký Hành trình"),
+    GROUP_F("GROUP F", "Check-in Journal", "Nhật ký Check-in"),
     GROUP_G("GROUP G", "Discovery Collections", "Bộ sưu tập Khám phá"),
     GROUP_H("GROUP H", "Memories & Video Studio", "Ký ức & Phim Điện ảnh"),
-    GROUP_I("GROUP I", "Profile & Subscription", "Hồ sơ & Gói dịch vụ")
+    GROUP_I("GROUP I", "Personal Profile", "Hồ sơ Cá nhân")
 }
 
 enum class JourneyScreenId(
@@ -93,19 +101,19 @@ enum class JourneyScreenId(
     A8_EMAIL_VERIFY("A8-VERIFY", ScreenGroup.GROUP_A, "Email Verification", "Xác thực Email", false),
 
     // Group B: Home
-    B1_HOME_DASHBOARD("B1-HOME", ScreenGroup.GROUP_B, "Home Dashboard", "Trang chủ Khám phá", true, PrimaryTab.HOME),
+    B1_HOME_DASHBOARD("B1-HOME", ScreenGroup.GROUP_B, "Social Feed", "Bảng tin Bạn bè", true, PrimaryTab.HOME),
     B2_GLOBAL_SEARCH("B2-SEARCH", ScreenGroup.GROUP_B, "Global Search", "Tìm kiếm Toàn cầu", true, PrimaryTab.HOME),
     B3_NOTIFICATIONS("B3-NOTIF", ScreenGroup.GROUP_B, "Notifications", "Thông báo", true, PrimaryTab.HOME),
 
     // Group C: Explore
-    C1_EXPLORE_MAP("C1-MAP", ScreenGroup.GROUP_C, "Explore Map", "Bản đồ Khám phá", true, PrimaryTab.EXPLORE),
+    C1_EXPLORE_MAP("C1-MAP", ScreenGroup.GROUP_C, "Visited Map", "Bản đồ Nơi đã đi", true, PrimaryTab.EXPLORE),
     C2_DISCOVERY_FEED("C2-FEED", ScreenGroup.GROUP_C, "Discovery Feed", "Bảng tin Điểm đến", true, PrimaryTab.EXPLORE),
     C3_PLACE_DETAILS("C3-PLACE", ScreenGroup.GROUP_C, "Place Details", "Chi tiết Điểm đến", true, PrimaryTab.EXPLORE),
     C4_SAVED_PLACES("C4-SAVED", ScreenGroup.GROUP_C, "Saved Places", "Địa điểm Đã lưu", true, PrimaryTab.EXPLORE),
 
-    // Group D: AI Discovery (Full-screen camera hides bottom bar)
-    D1_AI_CAMERA("D1-CAMERA", ScreenGroup.GROUP_D, "AI Camera", "Ống kính AI", false, PrimaryTab.DISCOVER),
-    D2_IMAGE_PREVIEW("D2-PREVIEW", ScreenGroup.GROUP_D, "Image Preview", "Xem trước Ảnh chụp", false, PrimaryTab.DISCOVER),
+    // Group D: Locket Camera
+    D1_AI_CAMERA("D1-CAMERA", ScreenGroup.GROUP_D, "Locket Camera", "Ống kính Locket", true, PrimaryTab.DISCOVER),
+    D2_IMAGE_PREVIEW("D2-PREVIEW", ScreenGroup.GROUP_D, "Image Preview", "Xem trước Ảnh chụp", true, PrimaryTab.DISCOVER),
     D3_AI_PROCESSING("D3-PROCESS", ScreenGroup.GROUP_D, "AI Processing", "Đang Phân tích AI", false, PrimaryTab.DISCOVER),
     D4_RECOGNITION_RESULT("D4-RESULT", ScreenGroup.GROUP_D, "Recognition Result", "Kết quả Nhận diện", true, PrimaryTab.DISCOVER),
     D5_DISCOVERY_DETAILS("D5-DETAIL", ScreenGroup.GROUP_D, "Discovery Details", "Chiều sâu Lịch sử", true, PrimaryTab.DISCOVER),
@@ -633,4 +641,158 @@ object JourneySampleRepository {
             descriptionVi = "Hồ sơ → Gói Hội viên → So sánh Gói → Cài đặt & Quyền riêng tư"
         )
     )
+
+    val friendStories = listOf(
+        FriendStoryItem(
+            id = "story_lan_anh",
+            authorName = "Lan Anh",
+            avatarInitials = "LA",
+            placeId = "place_hoian",
+            placeName = "Phố Cổ Hội An",
+            timeAgo = "18 phút trước",
+            caption = "Đêm phố cổ lung linh đèn lồng lụa, thả hoa đăng trên sông Hoài 🏮✨",
+            photoRes = R.drawable.img_hoian_lanterns
+        ),
+        FriendStoryItem(
+            id = "story_hoang_nam",
+            authorName = "Hoàng Nam",
+            avatarInitials = "HN",
+            placeId = "place_halong",
+            placeName = "Vịnh Hạ Long",
+            timeAgo = "1 giờ trước",
+            caption = "Bình minh trên boong tàu giữa kỳ quan thiên nhiên thế giới ⛵🌊",
+            photoRes = R.drawable.img_hero_halong_bay
+        ),
+        FriendStoryItem(
+            id = "story_thao_tien",
+            authorName = "Thảo Tiên",
+            avatarInitials = "TT",
+            placeId = "place_sapa",
+            placeName = "Ruộng bậc thang Sa Pa",
+            timeAgo = "3 giờ trước",
+            caption = "Săn mây buổi sớm trên thung lũng Mường Hoa - Sa Pa 🌾☁️",
+            photoRes = R.drawable.img_sapa_terraces
+        ),
+        FriendStoryItem(
+            id = "story_tuan_kiet",
+            authorName = "Tuấn Kiệt",
+            avatarInitials = "TK",
+            placeId = "place_hanoi_temple",
+            placeName = "Văn Miếu – Quốc Tử Giám",
+            timeAgo = "5 giờ trước",
+            caption = "Chiều thu Hà Nội ghé thăm Khuê Văn Các cổ kính ⛩️🍂",
+            photoRes = R.drawable.img_hanoi_temple
+        )
+    )
+
+    val initialSocialPosts = listOf(
+        SocialPostItem(
+            id = "post_1",
+            isMine = true,
+            authorName = "Minh Nguyễn",
+            authorHandle = "@minh.journey",
+            avatarInitials = "MN",
+            placeId = "place_halong",
+            placeName = "Vịnh Hạ Long, Quảng Ninh",
+            timeAgo = "Vừa xong",
+            dateLabel = "14/11/2026",
+            caption = "Chèo kayak xuyên hang Luồn, nước trong xanh như ngọc bích! ⛵✨",
+            photoRes = R.drawable.img_hero_halong_bay,
+            photoUri = null,
+            likesCount = 28,
+            isLiked = true,
+            comments = listOf(
+                SocialCommentItem("Lan Anh", "Ảnh nét quá Minh ơi! Góc chụp đỉnh thật 😍"),
+                SocialCommentItem("Hoàng Nam", "Cuối tuần này mình cũng ra Hạ Long nè!")
+            )
+        ),
+        SocialPostItem(
+            id = "post_2",
+            isMine = false,
+            authorName = "Lan Anh",
+            authorHandle = "@lananh.wander",
+            avatarInitials = "LA",
+            placeId = "place_hoian",
+            placeName = "Phố Cổ Hội An, Quảng Nam",
+            timeAgo = "42 phút trước",
+            dateLabel = "14/11/2026",
+            caption = "Một góc phố đèn lồng rực rỡ bên bờ sông Hoài đêm rằm 🏮💛",
+            photoRes = R.drawable.img_hoian_lanterns,
+            photoUri = null,
+            likesCount = 64,
+            isLiked = false,
+            comments = listOf(
+                SocialCommentItem("Thảo Tiên", "Nhớ món Cao lầu Hội An quá đi!")
+            )
+        ),
+        SocialPostItem(
+            id = "post_3",
+            isMine = true,
+            authorName = "Minh Nguyễn",
+            authorHandle = "@minh.journey",
+            avatarInitials = "MN",
+            placeId = "place_sapa",
+            placeName = "Bản Cát Cát — Sa Pa, Lào Cai",
+            timeAgo = "Hôm qua",
+            dateLabel = "13/11/2026",
+            caption = "Mùa vàng trên rẻo cao Tây Bắc, không khí se lạnh 14°C cực thích 🌾🏔️",
+            photoRes = R.drawable.img_sapa_terraces,
+            photoUri = null,
+            likesCount = 45,
+            isLiked = true,
+            comments = emptyList()
+        ),
+        SocialPostItem(
+            id = "post_4",
+            isMine = false,
+            authorName = "Hoàng Nam",
+            authorHandle = "@nam.explorer",
+            avatarInitials = "HN",
+            placeId = "place_hanoi_temple",
+            placeName = "Văn Miếu – Quốc Tử Giám, Hà Nội",
+            timeAgo = "2 ngày trước",
+            dateLabel = "12/11/2026",
+            caption = "Nét kiến trúc cổ kính gần 1.000 năm tuổi giữa lòng thủ đô ⛩️📖",
+            photoRes = R.drawable.img_hanoi_temple,
+            photoUri = null,
+            likesCount = 51,
+            isLiked = false,
+            comments = emptyList()
+        )
+    )
 }
+
+data class FriendStoryItem(
+    val id: String,
+    val authorName: String,
+    val avatarInitials: String,
+    val placeId: String,
+    val placeName: String,
+    val timeAgo: String,
+    val caption: String,
+    @DrawableRes val photoRes: Int
+)
+
+data class SocialCommentItem(
+    val authorName: String,
+    val text: String
+)
+
+data class SocialPostItem(
+    val id: String,
+    val isMine: Boolean,
+    val authorName: String,
+    val authorHandle: String,
+    val avatarInitials: String,
+    val placeId: String,
+    val placeName: String,
+    val timeAgo: String,
+    val dateLabel: String,
+    val caption: String,
+    @DrawableRes val photoRes: Int,
+    val photoUri: String? = null,
+    val likesCount: Int = 0,
+    val isLiked: Boolean = false,
+    val comments: List<SocialCommentItem> = emptyList()
+)
+

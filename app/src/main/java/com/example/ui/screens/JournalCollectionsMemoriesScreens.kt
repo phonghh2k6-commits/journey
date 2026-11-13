@@ -70,113 +70,154 @@ import com.example.ui.theme.JourneyTheme
 import com.example.viewmodel.JourneyUiState
 
 // ============================================================================
-// PHASE 2 — SCREEN F1: JOURNAL HOME (FLOW 5: Journal -> Create Trip -> Trip Detail -> Add Media -> Timeline -> AI Story)
+// PHASE 2 — SCREEN F1: CHECK-IN PHOTO JOURNAL (NHẬT KÝ: NHỮNG BỨC ẢNH & NƠI ĐÃ CHECK-IN)
 // ============================================================================
 @Composable
 fun JournalHomeScreen(
     uiState: JourneyUiState,
     onSelectTrip: (String) -> Unit,
-    onNavigate: (JourneyScreenId) -> Unit
+    onNavigate: (JourneyScreenId) -> Unit,
+    onSelectPlace: (String, Boolean) -> Unit = { _, _ -> }
 ) {
+    val colors = JourneyTheme.colors
     val lang = uiState.language
-    val totalDays = uiState.trips.sumOf { it.daysCount }
-    val totalMoments = uiState.trips.sumOf { it.momentsCount }
-    val totalDiscoveries = uiState.trips.sumOf { it.discoveriesCount }
+
+    // Combine user's Locket posts + trip moments into a unified check-in photo gallery
+    val myPosts = uiState.socialPosts.filter { it.isMine }
+    val allMoments = uiState.trips.flatMap { it.moments }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp)
+            .padding(bottom = 28.dp)
             .testTag("screen_f1_journal_home")
     ) {
-        JourneyTopBar(
-            screenId = JourneyScreenId.F1_JOURNAL_HOME,
-            language = lang,
-            trailingContent = {
+        Column(modifier = Modifier.padding(horizontal = JourneySpacing.md, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = tr(
+                            lang,
+                            "My Check-in Photos (${myPosts.size + allMoments.size})",
+                            "Nhật Ký Ảnh Đã Check-in (${myPosts.size + allMoments.size})"
+                        ),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = colors.primaryText
+                    )
+                    Text(
+                        text = tr(
+                            lang,
+                            "All photos and places you have checked into",
+                            "Những bức ảnh và địa điểm bạn đã đặt chân tới"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondaryText
+                    )
+                }
                 JourneyButton(
-                    text = tr(lang, "New Trip", "Tạo Chuyến đi"),
-                    leadingIcon = Icons.Default.Add,
+                    text = tr(lang, "+ Check-in", "+ Chụp mới"),
+                    leadingIcon = Icons.Default.PhotoCamera,
                     variant = JourneyButtonVariant.PRIMARY,
-                    onClick = { onNavigate(JourneyScreenId.F2_CREATE_TRIP) },
+                    onClick = { onNavigate(JourneyScreenId.D1_AI_CAMERA) },
                     testTag = "journal_create_trip_btn"
                 )
             }
-        )
 
-        Column(modifier = Modifier.padding(horizontal = JourneySpacing.md)) {
-            JourneySectionHeader(
-                eyebrow = tr(lang, "PERSONAL CHRONICLES", "NHẬT KÝ HÀNH TRÌNH"),
-                title = tr(lang, "Travel Journals & Daily Memories", "Nhật Ký Hành Trình & Ký Ức Mỗi Ngày")
-            )
-            Spacer(modifier = Modifier.height(JourneySpacing.md))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Expedition Summary Metrics Strip
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                com.example.ui.components.JourneyStatPillCard(
-                    value = "$totalDays",
-                    label = tr(lang, "Days", "Ngày đi"),
-                    sublabel = tr(lang, "Logged", "Đã ghi"),
-                    modifier = Modifier.weight(1f)
-                )
-                com.example.ui.components.JourneyStatPillCard(
-                    value = "$totalMoments",
-                    label = tr(lang, "Moments", "Khoảnh khắc"),
-                    sublabel = tr(lang, "Captured", "Lưu giữ"),
-                    modifier = Modifier.weight(1f)
-                )
-                com.example.ui.components.JourneyStatPillCard(
-                    value = "$totalDiscoveries",
-                    label = tr(lang, "AI Scans", "Điểm quét AI"),
-                    sublabel = tr(lang, "Archived", "Di sản"),
-                    modifier = Modifier.weight(1f)
-                )
+            // 2-Column Grid of Locket Check-in Photos
+            val combinedItems = myPosts.map { post ->
+                Triple(post.placeName, post.caption, post.photoRes to post.photoUri) to post.dateLabel
+            } + allMoments.map { m ->
+                Triple(m.locationTag, m.titleVi, m.photoRes to (null as String?)) to m.timeLabel
             }
 
-            Spacer(modifier = Modifier.height(JourneySpacing.md))
-
-            uiState.trips.forEach { trip ->
-                JourneyEditorialCard(
-                    imageRes = trip.coverRes,
-                    tagText = "${trip.dateRange} • ${trip.daysCount} DAYS",
-                    title = tr(lang, trip.titleEn, trip.titleVi),
-                    subtitle = tr(lang, trip.storyExcerptEn, trip.storyExcerptVi),
-                    metaText = "${tr(lang, trip.locationEn, trip.locationVi)} • ${trip.momentsCount} MOMENTS • ${trip.discoveriesCount} AI SCANS",
-                    onCardClick = { onSelectTrip(trip.id) },
-                    modifier = Modifier.padding(bottom = JourneySpacing.md),
-                    heightDp = 260,
-                    testTag = "journal_trip_card_${trip.id}"
-                )
+            combinedItems.chunked(2).forEach { rowItems ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    rowItems.forEach { (triple, dateStr) ->
+                        val (placeLabel, captionText, photoPair) = triple
+                        val (photoRes, photoUri) = photoPair
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = colors.surface,
+                            border = BorderStroke(1.dp, colors.border),
+                            shadowElevation = com.example.ui.theme.JourneyElevation.card,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onNavigate(JourneyScreenId.C1_EXPLORE_MAP) }
+                        ) {
+                            Column {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(150.dp)
+                                        .background(JourneyPalette.DeepObsidian)
+                                ) {
+                                    if (photoUri != null) {
+                                        coil.compose.AsyncImage(
+                                            model = photoUri,
+                                            contentDescription = placeLabel,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Image(
+                                            painter = painterResource(id = photoRes),
+                                            contentDescription = placeLabel,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(JourneyRadius.pill),
+                                        color = Color(0xBF0F172A),
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp)
+                                    ) {
+                                        Text(
+                                            text = dateStr,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = JourneyPalette.Ivory,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = "📍 $placeLabel",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = colors.accent,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = captionText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.secondaryText,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (rowItems.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
-
-            Spacer(modifier = Modifier.height(JourneySpacing.xs))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                JourneyButton(
-                    text = tr(lang, "Log Daily Moment", "Ghi Khoảnh khắc"),
-                    leadingIcon = Icons.Default.PhotoCamera,
-                    variant = JourneyButtonVariant.PRIMARY,
-                    onClick = { onNavigate(JourneyScreenId.F5_CREATE_DAILY_MOMENT) },
-                    modifier = Modifier.weight(1f)
-                )
-                JourneyButton(
-                    text = tr(lang, "AI Story", "Truyện Kể AI"),
-                    leadingIcon = Icons.Default.AutoAwesome,
-                    variant = JourneyButtonVariant.SECONDARY,
-                    onClick = { onNavigate(JourneyScreenId.H1_AI_STORY_PREVIEW) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            JourneyButton(
-                text = tr(lang, "Open Cinematic Video Creator", "Mở Xưởng Phim Hành Trình 4K"),
-                leadingIcon = Icons.Default.MovieCreation,
-                variant = JourneyButtonVariant.SURFACE_TONAL,
-                onClick = { onNavigate(JourneyScreenId.H2_VIDEO_CREATOR) },
-                modifier = Modifier.fillMaxWidth()
-            )
         }
     }
 }

@@ -103,11 +103,11 @@ fun JourneyAppHeaderBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: Brand Icon + Title + Badge + User Name
+            // Left: Brand Icon + Title + User Name & Handle
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
@@ -115,7 +115,7 @@ fun JourneyAppHeaderBar(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(JourneyPalette.Midnight)
                         .border(1.5.dp, colors.accent, CircleShape)
@@ -124,11 +124,11 @@ fun JourneyAppHeaderBar(
                         painter = painterResource(id = R.drawable.img_launcher_compass),
                         contentDescription = "Journey AI",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Journey AI",
@@ -144,15 +144,15 @@ fun JourneyAppHeaderBar(
                             color = colors.accentContainer
                         ) {
                             Text(
-                                text = tr(lang, "My Atlas", "Của tôi"),
+                                text = tr(lang, "Locket", "Locket Du lịch"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = colors.accent,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
                     Text(
-                        text = uiState.userName,
+                        text = "${uiState.userName} · ${uiState.userHandle}",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.secondaryText,
                         maxLines = 1,
@@ -161,12 +161,11 @@ fun JourneyAppHeaderBar(
                 }
             }
 
-            // Right: Quick AI Lens Pill + Light/Dark Toggle + Explorer Avatar Popover Trigger ("MN ⌄")
+            // Right: Quick Camera Button + Light/Dark Toggle + Avatar Pill
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Prominent Quick AI Lens Pill Button
                 Surface(
                     shape = RoundedCornerShape(JourneyRadius.pill),
                     color = colors.accentContainer,
@@ -178,28 +177,27 @@ fun JourneyAppHeaderBar(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "AI Lens",
+                            contentDescription = "Chụp Locket",
                             tint = colors.accent,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = tr(lang, "AI Scan", "Quét AI"),
+                            text = tr(lang, "Snap", "Chụp"),
                             style = MaterialTheme.typography.labelLarge,
                             color = colors.accent
                         )
                     }
                 }
 
-                // Instant Light / Dark Mode Button on Top Header
                 IconButton(
                     onClick = onToggleTheme,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .background(colors.surface, CircleShape)
                         .border(1.dp, colors.border, CircleShape)
                         .testTag("header_theme_toggle_btn")
@@ -208,11 +206,10 @@ fun JourneyAppHeaderBar(
                         imageVector = if (uiState.isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
                         contentDescription = "Toggle Light or Dark Mode",
                         tint = colors.accent,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
 
-                // Explorer Avatar Pill ("MN ^") that opens the Floating Quick Profile & Settings Card
                 Surface(
                     shape = RoundedCornerShape(JourneyRadius.pill),
                     color = colors.surface,
@@ -227,27 +224,37 @@ fun JourneyAppHeaderBar(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 5.dp, end = 9.dp, top = 4.dp, bottom = 4.dp)
+                        modifier = Modifier.padding(start = 4.dp, end = 7.dp, top = 3.dp, bottom = 3.dp)
                     ) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(30.dp)
+                                .clip(CircleShape)
                                 .background(colors.accent, CircleShape)
                         ) {
-                            Text(
-                                text = "MN",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onAccent
-                            )
+                            if (uiState.userAvatarUri != null) {
+                                coil.compose.AsyncImage(
+                                    model = uiState.userAvatarUri,
+                                    contentDescription = uiState.userName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = uiState.userInitials,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.onAccent
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Icon(
                             imageVector = if (uiState.isQuickProfileOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             contentDescription = "Toggle Quick Profile Popover",
                             tint = colors.primaryText,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }

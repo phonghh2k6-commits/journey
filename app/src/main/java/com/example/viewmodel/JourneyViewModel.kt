@@ -6,6 +6,7 @@ import com.example.model.AppLanguage
 import com.example.model.ChatMessageItem
 import com.example.model.DailyMoment
 import com.example.model.DiscoveryCollection
+import com.example.model.FriendStoryItem
 import com.example.model.JourneySampleRepository
 import com.example.model.JourneyScreenId
 import com.example.model.PlaceItem
@@ -13,6 +14,8 @@ import com.example.model.PrimaryTab
 import com.example.model.PrototypeFlowSpec
 import com.example.model.SavedConversation
 import com.example.model.ScreenStateMode
+import com.example.model.SocialCommentItem
+import com.example.model.SocialPostItem
 import com.example.model.TripJournal
 import com.example.model.ViewportPreset
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,14 +39,22 @@ data class JourneyUiState(
     val isAuthenticated: Boolean = true,
     val userEmail: String = "minh.nguyen@journey.ai",
     val userName: String = "Minh Nguyễn",
+    val userHandle: String = "@minh.journey",
+    val userBio: String = "Yêu dịch chuyển, thích chụp ảnh khoảnh khắc Locket và lưu dấu bản đồ Việt Nam 🇻🇳✨",
+    val userCity: String = "Hà Nội, Việt Nam",
+    val userAvatarUri: String? = null,
     val selectedPlanTier: String = "JOURNEY_PRO_ANNUAL",
     // Permissions simulation
     val cameraPermissionGranted: Boolean = true,
     val locationPermissionGranted: Boolean = true,
     val micPermissionGranted: Boolean = true,
+    // Social Feed & Locket State
+    val socialPosts: List<SocialPostItem> = JourneySampleRepository.initialSocialPosts,
+    val friendStories: List<FriendStoryItem> = JourneySampleRepository.friendStories,
+    val socialFeedFilter: String = "ALL",
     // Domain interactive state
     val places: List<PlaceItem> = JourneySampleRepository.places,
-    val selectedPlaceId: String = "place_hoian",
+    val selectedPlaceId: String = "place_halong",
     val trips: List<TripJournal> = JourneySampleRepository.trips,
     val selectedTripId: String = "trip_heritage_north_central",
     val selectedMomentId: String = "m_01",
@@ -74,6 +85,14 @@ data class JourneyUiState(
 
     val selectedCollection: DiscoveryCollection
         get() = collections.find { it.id == selectedCollectionId } ?: collections.first()
+
+    val userInitials: String
+        get() {
+            val parts = userName.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (parts.isEmpty()) return "MN"
+            if (parts.size == 1) return parts[0].take(2).uppercase()
+            return "${parts.first().first()}${parts.last().first()}".uppercase()
+        }
 }
 
 class JourneyViewModel : ViewModel() {
@@ -87,6 +106,109 @@ class JourneyViewModel : ViewModel() {
 
     fun closeQuickProfile() {
         _uiState.update { it.copy(isQuickProfileOpen = false) }
+    }
+
+    fun setSocialFeedFilter(filter: String) {
+        _uiState.update { it.copy(socialFeedFilter = filter) }
+    }
+
+    fun toggleLikePost(postId: String) {
+        _uiState.update { state ->
+            val updated = state.socialPosts.map { post ->
+                if (post.id == postId) {
+                    val nextLiked = !post.isLiked
+                    post.copy(
+                        isLiked = nextLiked,
+                        likesCount = (post.likesCount + if (nextLiked) 1 else -1).coerceAtLeast(0)
+                    )
+                } else post
+            }
+            state.copy(socialPosts = updated)
+        }
+    }
+
+    fun addPostComment(postId: String, commentText: String) {
+        val trimmed = commentText.trim()
+        if (trimmed.isEmpty()) return
+        _uiState.update { state ->
+            val updated = state.socialPosts.map { post ->
+                if (post.id == postId) {
+                    post.copy(
+                        comments = post.comments + SocialCommentItem(
+                            authorName = state.userName,
+                            text = trimmed
+                        )
+                    )
+                } else post
+            }
+            state.copy(
+                socialPosts = updated,
+                toastBannerMessage = "💬 Đã gửi bình luận của bạn!"
+            )
+        }
+    }
+
+    fun publishLocketPost(caption: String, placeId: String, imageUri: String?) {
+        _uiState.update { state ->
+            val targetPlace = state.places.find { it.id == placeId } ?: state.selectedPlace
+            val finalCaption = caption.trim().ifEmpty {
+                "Check-in khoảnh khắc tuyệt đẹp tại ${targetPlace.nameVi} ✨"
+            }
+            val newPost = SocialPostItem(
+                id = "post_${System.currentTimeMillis()}",
+                isMine = true,
+                authorName = state.userName,
+                authorHandle = state.userHandle,
+                avatarInitials = state.userInitials,
+                placeId = targetPlace.id,
+                placeName = "${targetPlace.nameVi}, ${targetPlace.regionVi}",
+                timeAgo = "Vừa xong",
+                dateLabel = "Hôm nay",
+                caption = finalCaption,
+                photoRes = targetPlace.imageRes,
+                photoUri = imageUri,
+                likesCount = 1,
+                isLiked = true,
+                comments = emptyList()
+            )
+            // Also mark place as visited/saved on map
+            val updatedPlaces = state.places.map { p ->
+                if (p.id == targetPlace.id) p.copy(isSaved = true) else p
+            }
+            state.copy(
+                socialPosts = listOf(newPost) + state.socialPosts,
+                places = updatedPlaces,
+                capturedImageUri = null,
+                currentScreen = JourneyScreenId.B1_HOME_DASHBOARD,
+                toastBannerMessage = "🚀 Đã đăng ảnh lên Bảng tin & lưu vào Nhật ký Check-in!"
+            )
+        }
+    }
+
+    fun updatePersonalProfile(
+        name: String,
+        handle: String,
+        bio: String,
+        city: String,
+        email: String,
+        avatarUri: String? = _uiState.value.userAvatarUri
+    ) {
+        _uiState.update { state ->
+            val cleanName = name.trim().ifEmpty { state.userName }
+            val cleanHandle = handle.trim().let {
+                if (it.isEmpty()) state.userHandle
+                else if (it.startsWith("@")) it else "@$it"
+            }
+            state.copy(
+                userName = cleanName,
+                userHandle = cleanHandle,
+                userBio = bio.trim(),
+                userCity = city.trim(),
+                userEmail = email.trim().ifEmpty { state.userEmail },
+                userAvatarUri = avatarUri,
+                toastBannerMessage = "✅ Đã lưu thông tin hồ sơ cá nhân!"
+            )
+        }
     }
 
     fun toggleMinimalView() {
@@ -109,8 +231,6 @@ class JourneyViewModel : ViewModel() {
         _uiState.update {
             it.copy(
                 capturedImageUri = uriString,
-                currentScreen = JourneyScreenId.D2_IMAGE_PREVIEW,
-                backStack = (it.backStack + it.currentScreen).takeLast(24),
                 isQuickProfileOpen = false
             )
         }

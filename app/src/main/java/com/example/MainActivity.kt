@@ -370,7 +370,10 @@ private fun JourneyScreenRouter(
             onNavigate = { viewModel.navigateTo(it) },
             onSelectPlace = { id, openDetail -> viewModel.selectPlace(id, openDetail) },
             onToggleSavePlace = { viewModel.toggleSavePlace(it) },
-            onSelectCollection = { viewModel.selectCollection(it) }
+            onSelectCollection = { viewModel.selectCollection(it) },
+            onSetFeedFilter = { viewModel.setSocialFeedFilter(it) },
+            onToggleLikePost = { viewModel.toggleLikePost(it) },
+            onAddComment = { postId, text -> viewModel.addPostComment(postId, text) }
         )
 
         JourneyScreenId.B2_GLOBAL_SEARCH -> GlobalSearchScreen(
@@ -422,7 +425,10 @@ private fun JourneyScreenRouter(
             onBack = onBackAction,
             onSelectPlace = { id, openDetail -> viewModel.selectPlace(id, openDetail) },
             onImagePicked = { uriStr -> viewModel.setCapturedImageUri(uriStr) },
-            onNavigate = { viewModel.navigateTo(it) }
+            onNavigate = { viewModel.navigateTo(it) },
+            onPublishLocketPost = { caption, placeId, uri ->
+                viewModel.publishLocketPost(caption, placeId, uri)
+            }
         )
 
         JourneyScreenId.D2_IMAGE_PREVIEW -> ImagePreviewScreen(
@@ -548,7 +554,10 @@ private fun JourneyScreenRouter(
 
         JourneyScreenId.I1_PROFILE -> ProfileScreen(
             uiState = uiState,
-            onNavigate = { viewModel.navigateTo(it) }
+            onNavigate = { viewModel.navigateTo(it) },
+            onUpdateProfile = { name, handle, bio, city, email, avatarUri ->
+                viewModel.updatePersonalProfile(name, handle, bio, city, email, avatarUri)
+            }
         )
 
         JourneyScreenId.I2_SETTINGS -> SettingsScreen(

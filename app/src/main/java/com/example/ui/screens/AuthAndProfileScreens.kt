@@ -806,15 +806,32 @@ fun EmailVerificationScreen(
 }
 
 // ============================================================================
-// I1: PROFILE (FLOW 7: Profile -> Subscription -> Plan Comparison -> Settings & Privacy)
+// I1: PERSONAL PROFILE EDITOR (HỒ SƠ: CHỈ THAY AVATAR, TÊN & THÔNG TIN CÁ NHÂN)
 // ============================================================================
 @Composable
 fun ProfileScreen(
     uiState: JourneyUiState,
-    onNavigate: (JourneyScreenId) -> Unit
+    onNavigate: (JourneyScreenId) -> Unit,
+    onUpdateProfile: (String, String, String, String, String, String?) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     val colors = JourneyTheme.colors
     val lang = uiState.language
+
+    var name by remember(uiState.userName) { mutableStateOf(uiState.userName) }
+    var handle by remember(uiState.userHandle) { mutableStateOf(uiState.userHandle) }
+    var bio by remember(uiState.userBio) { mutableStateOf(uiState.userBio) }
+    var city by remember(uiState.userCity) { mutableStateOf(uiState.userCity) }
+    var email by remember(uiState.userEmail) { mutableStateOf(uiState.userEmail) }
+    var avatarUri by remember(uiState.userAvatarUri) { mutableStateOf(uiState.userAvatarUri) }
+
+    val avatarPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            avatarUri = uri.toString()
+            onUpdateProfile(name, handle, bio, city, email, avatarUri)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -823,141 +840,172 @@ fun ProfileScreen(
             .padding(bottom = 32.dp)
             .testTag("screen_i1_profile")
     ) {
-        JourneyTopBar(
-            screenId = JourneyScreenId.I1_PROFILE,
-            language = lang,
-            trailingContent = {
-                JourneyButton(
-                    text = tr(lang, "Settings", "Cài đặt"),
-                    leadingIcon = Icons.Default.Settings,
-                    variant = JourneyButtonVariant.SECONDARY,
-                    onClick = { onNavigate(JourneyScreenId.I2_SETTINGS) },
-                    testTag = "profile_to_settings_btn"
-                )
-            }
-        )
-
-        Column(modifier = Modifier.padding(horizontal = JourneySpacing.md)) {
-            // Explorer Identity Card
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md, vertical = 12.dp)
+        ) {
             Surface(
-                shape = RoundedCornerShape(JourneyRadius.xl),
+                shape = RoundedCornerShape(24.dp),
                 color = colors.surface,
-                border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, colors.border),
+                shadowElevation = com.example.ui.theme.JourneyElevation.card,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(JourneySpacing.xl)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // 1. Editable Avatar Circle
+                    Box(
+                        contentAlignment = Alignment.BottomEnd,
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clickable {
+                                avatarPickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            }
+                            .testTag("profile_avatar_picker_btn")
+                    ) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(68.dp)
+                                .fillMaxSize()
                                 .clip(CircleShape)
-                                .border(2.dp, colors.accent, CircleShape)
-                                .background(colors.secondaryBackground)
+                                .background(colors.accentContainer, CircleShape)
+                                .border(2.5.dp, colors.accent, CircleShape)
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.img_launcher_compass),
-                                contentDescription = uiState.userName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            if (avatarUri != null) {
+                                coil.compose.AsyncImage(
+                                    model = avatarUri,
+                                    contentDescription = name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(
+                                    text = uiState.userInitials,
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    color = colors.accent
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            JourneyBadgePill(text = "JOURNEY+ PATRON • ${uiState.selectedPlanTier}")
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = uiState.userName,
-                                style = MaterialTheme.typography.headlineLarge,
-                                color = colors.primaryText
-                            )
-                            Text(
-                                text = uiState.userEmail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.secondaryText
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(JourneySpacing.lg))
-
-                    // Stats Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        listOf(
-                            "28" to tr(lang, "AI Scans", "Lượt quét AI"),
-                            "${uiState.trips.size}" to tr(lang, "Journals", "Nhật ký"),
-                            "${uiState.collections.size}" to tr(lang, "Collections", "Bộ sưu tập"),
-                            "4" to tr(lang, "4K Reels", "Phim 4K")
-                        ).forEach { (num, label) ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = num, style = MaterialTheme.typography.headlineMedium, color = colors.accent)
-                                Text(text = label, style = MaterialTheme.typography.labelSmall, color = colors.secondaryText)
+                        Surface(
+                            shape = CircleShape,
+                            color = colors.accent,
+                            border = BorderStroke(2.dp, colors.surface),
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CameraAlt,
+                                    contentDescription = "Đổi ảnh đại diện",
+                                    tint = colors.onAccent,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(JourneySpacing.lg))
-
-            val menuRows = listOf(
-                Triple(
-                    tr(lang, "Journey+ Membership & Plans", "Gói Hội Viên Journey+"),
-                    tr(lang, "Unlimited AI lens scans, offline voice packs & 4K cinema reel exports", "Quét AI không giới hạn, thuyết minh ngoại tuyến & xuất phim 4K"),
-                    JourneyScreenId.I3_SUBSCRIPTION
-                ),
-                Triple(
-                    tr(lang, "Application Settings & Language", "Cài Đặt Ứng Dụng & Ngôn Ngữ"),
-                    tr(lang, "Dark/Light appearance, Vietnamese/English, voice speed & offline cache", "Giao diện Sáng/Tối, Tiếng Việt/Anh, tốc độ giọng đọc & bộ nhớ đệm"),
-                    JourneyScreenId.I2_SETTINGS
-                ),
-                Triple(
-                    tr(lang, "Privacy, Permissions & Data", "Quyền Riêng Tư & Quản Lý Dữ Liệu"),
-                    tr(lang, "Hardware permissions, personal archive export & cloud security", "Quyền thiết bị, xuất dữ liệu cá nhân & bảo mật đám mây"),
-                    JourneyScreenId.I4_PRIVACY_AND_DATA
-                ),
-                Triple(
-                    tr(lang, "Saved AI Conversations", "Lịch Sử Trò Chuyện AI"),
-                    tr(lang, "Review your saved cultural Q&A and audio guide transcripts", "Xem lại các cuộc trò chuyện văn hóa và bản ghi thuyết minh"),
-                    JourneyScreenId.E3_CONVERSATION_HISTORY
-                ),
-                Triple(
-                    tr(lang, "Sign Out / Switch Account", "Đăng Xuất / Đổi Tài Khoản"),
-                    tr(lang, "Return to Welcome & Sign In screen", "Quay về màn hình Chào mừng & Đăng nhập"),
-                    JourneyScreenId.A1_SPLASH
-                )
-            )
-
-            menuRows.forEach { (title, subtitle, targetScreen) ->
-                Surface(
-                    shape = RoundedCornerShape(JourneyRadius.lg),
-                    color = colors.surface,
-                    border = BorderStroke(1.dp, colors.border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 5.dp)
-                        .clickable { onNavigate(targetScreen) }
-                        .testTag("profile_menu_${targetScreen.code.lowercase()}")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(JourneySpacing.lg),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = title, style = MaterialTheme.typography.titleMedium, color = colors.primaryText)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
-                        }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = title,
-                            tint = colors.accent
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = colors.primaryText
+                        )
+                        Text(
+                            text = "$handle · $city",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondaryText
                         )
                     }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        JourneyButton(
+                            text = tr(lang, "📷 Change Avatar", "📷 Đổi ảnh đại diện"),
+                            variant = JourneyButtonVariant.SECONDARY,
+                            onClick = {
+                                avatarPickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            }
+                        )
+                        if (avatarUri != null) {
+                            JourneyButton(
+                                text = tr(lang, "Use Initials", "Dùng chữ tắt"),
+                                variant = JourneyButtonVariant.GHOST,
+                                onClick = {
+                                    avatarUri = null
+                                    onUpdateProfile(name, handle, bio, city, email, null)
+                                }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = colors.subtleBorder)
+
+                    // 2. Personal Information Fields
+                    JourneyTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = tr(lang, "Display Name", "Họ và tên hiển thị"),
+                        placeholder = "Minh Nguyễn",
+                        leadingIcon = Icons.Default.Person,
+                        testTag = "profile_name_input"
+                    )
+
+                    JourneyTextField(
+                        value = handle,
+                        onValueChange = { handle = it },
+                        label = tr(lang, "Username (@id)", "ID / Tên người dùng"),
+                        placeholder = "@minh.journey",
+                        testTag = "profile_handle_input"
+                    )
+
+                    JourneyTextField(
+                        value = bio,
+                        onValueChange = { bio = it },
+                        label = tr(lang, "Short Bio", "Giới thiệu bản thân (Bio)"),
+                        placeholder = "Viết đôi dòng giới thiệu...",
+                        singleLine = false,
+                        testTag = "profile_bio_input"
+                    )
+
+                    JourneyTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        label = tr(lang, "Hometown / City", "Thành phố / Quê quán"),
+                        placeholder = "Hà Nội, Việt Nam",
+                        leadingIcon = Icons.Default.LocationOn,
+                        testTag = "profile_city_input"
+                    )
+
+                    JourneyTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = tr(lang, "Email / Contact", "Email / Liên hệ"),
+                        placeholder = "minh.nguyen@journey.ai",
+                        leadingIcon = Icons.Default.Email,
+                        testTag = "profile_email_input"
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    JourneyButton(
+                        text = tr(lang, "💾 Save Personal Info", "💾 Lưu thông tin cá nhân"),
+                        variant = JourneyButtonVariant.PRIMARY,
+                        onClick = {
+                            onUpdateProfile(name, handle, bio, city, email, avatarUri)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        testTag = "profile_save_btn"
+                    )
                 }
             }
         }

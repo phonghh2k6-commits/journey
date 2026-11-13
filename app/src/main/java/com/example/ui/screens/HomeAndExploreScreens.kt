@@ -77,6 +77,7 @@ import com.example.ui.components.JourneySearchInputBar
 import com.example.ui.components.JourneySecondaryButton
 import com.example.ui.components.JourneySectionHeader
 import com.example.ui.components.JourneyStatPillCard
+import com.example.ui.components.JourneyTextField
 import com.example.ui.components.JourneyTopBar
 import com.example.ui.components.tr
 import com.example.ui.theme.JourneyElevation
@@ -87,8 +88,7 @@ import com.example.ui.theme.JourneyTheme
 import com.example.viewmodel.JourneyUiState
 
 // ============================================================================
-// PHASE 2 — SCREEN B1: HOME DASHBOARD
-// Editorial Hero + Active Expedition Strip + Category Filter + Spatial Landmarks + Collections
+// PHASE 2 — SCREEN B1: HOME DASHBOARD (TRANG CHỦ: TIN BẠN BÈ & BÀI ĐĂNG LOCKET)
 // ============================================================================
 @Composable
 fun HomeDashboardScreen(
@@ -96,378 +96,514 @@ fun HomeDashboardScreen(
     onNavigate: (JourneyScreenId) -> Unit,
     onSelectPlace: (String, Boolean) -> Unit,
     onToggleSavePlace: (String) -> Unit,
-    onSelectCollection: (String) -> Unit
+    onSelectCollection: (String) -> Unit,
+    onSetFeedFilter: (String) -> Unit = {},
+    onToggleLikePost: (String) -> Unit = {},
+    onAddComment: (String, String) -> Unit = { _, _ -> }
 ) {
     val colors = JourneyTheme.colors
     val lang = uiState.language
-    var selectedRegionFilter by remember { mutableStateOf("ALL") }
+    var activeStoryId by remember { mutableStateOf<String?>(null) }
+    var commentingPostId by remember { mutableStateOf<String?>(null) }
+    var commentDraft by remember { mutableStateOf("") }
 
-    val featuredPlace = uiState.places.firstOrNull { it.id == "place_halong" } ?: uiState.places.first()
-    val activeTrip = uiState.selectedTrip
-
-    val filteredPlaces = uiState.places.filter { place ->
-        when (selectedRegionFilter) {
-            "NORTH" -> place.id == "place_halong" || place.id == "place_hanoi_temple" || place.id == "place_sapa"
-            "CENTRAL" -> place.id == "place_hoian"
-            "SAVED" -> place.isSaved
+    val filteredPosts = uiState.socialPosts.filter { post ->
+        when (uiState.socialFeedFilter) {
+            "FRIENDS" -> !post.isMine
+            "MINE" -> post.isMine
             else -> true
         }
     }
+
+    val activeStory = uiState.friendStories.find { it.id == activeStoryId }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp)
+            .padding(bottom = 28.dp)
             .testTag("screen_b1_home_dashboard")
     ) {
-        // 1. Editorial Masthead Header
-        Row(
+        // 1. Thanh Tin 24h của Bạn bè & Của mình (Stories Strip)
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = JourneySpacing.md, vertical = JourneySpacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(top = 10.dp, bottom = 6.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "JOURNEY AI",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.accent
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "• HỘI AN, QUẢNG NAM • 25°C",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.sage
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = tr(lang, "Explore the World. Discover the Stories.", "Khám phá Thế giới. Lắng nghe Câu chuyện."),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = colors.primaryText
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(
-                    onClick = { onNavigate(JourneyScreenId.B2_GLOBAL_SEARCH) },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(colors.surface, CircleShape)
-                        .border(1.dp, colors.border, CircleShape)
-                        .testTag("home_search_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Global Search",
-                        tint = colors.primaryText
-                    )
-                }
-                IconButton(
-                    onClick = { onNavigate(JourneyScreenId.B3_NOTIFICATIONS) },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(colors.surface, CircleShape)
-                        .border(1.dp, colors.border, CircleShape)
-                        .testTag("home_notifications_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsNone,
-                        contentDescription = "Notifications",
-                        tint = colors.accent
-                    )
-                }
-            }
-        }
-
-        // 2. Full-Bleed Editorial Hero Showcase
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = JourneySpacing.md)
-                .height(390.dp)
-                .clip(RoundedCornerShape(JourneyRadius.xl))
-                .border(1.dp, colors.border, RoundedCornerShape(JourneyRadius.xl))
-                .clickable { onSelectPlace(featuredPlace.id, true) }
-                .testTag("home_hero_card")
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.img_hero_halong_bay),
-                contentDescription = featuredPlace.nameEn,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0x190B1017),
-                                Color(0x660B1017),
-                                Color(0xF20B1017)
-                            )
-                        )
-                    )
-            )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(JourneySpacing.lg),
+                    .padding(horizontal = JourneySpacing.md),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                JourneyBadgePill(
-                    text = "FEATURED STORY • ${featuredPlace.coordinates}",
-                    containerColor = Color(0xBB111923),
-                    contentColor = JourneyPalette.SandGold
+                Text(
+                    text = tr(lang, "Friends' Stories", "Tin Khoảnh Khắc Bạn Bè"),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.primaryText
                 )
-                JourneyBadgePill(
-                    text = "${(featuredPlace.confidenceScore * 100).toInt()}% AI MATCH",
-                    containerColor = Color(0xBB111923),
-                    contentColor = JourneyPalette.Ivory
+                Text(
+                    text = tr(lang, "+ Post Locket", "+ Đăng Locket"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.accent,
+                    modifier = Modifier.clickable { onNavigate(JourneyScreenId.D1_AI_CAMERA) }
                 )
             }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(JourneySpacing.xl)
-            ) {
-                Text(
-                    text = tr(lang, featuredPlace.categoryEn, featuredPlace.categoryVi).uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = JourneyPalette.SandGold
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = tr(lang, featuredPlace.nameEn, featuredPlace.nameVi),
-                    style = MaterialTheme.typography.displayMedium,
-                    color = JourneyPalette.Ivory
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = tr(lang, featuredPlace.summaryEn, featuredPlace.summaryVi),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = JourneyPalette.Ivory.copy(alpha = 0.85f),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(JourneySpacing.md))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    JourneyPrimaryButton(
-                        text = tr(lang, "Scan Monument (AI Lens)", "Quét Di sản (Ống kính AI)"),
-                        leadingIcon = Icons.Default.CameraAlt,
-                        onClick = { onNavigate(JourneyScreenId.D1_AI_CAMERA) },
-                        testTag = "hero_scan_camera_btn"
-                    )
-                    JourneySecondaryButton(
-                        text = tr(lang, "Voice Guide", "Thuyết minh"),
-                        leadingIcon = Icons.Default.GraphicEq,
-                        onClick = { onNavigate(JourneyScreenId.E2_VOICE_ASSISTANT) },
-                        testTag = "hero_voice_guide_btn"
-                    )
-                }
-            }
-        }
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(JourneySpacing.lg))
-
-        // 3. Active Expedition & Live Audio Guide Strip (Connects Home -> Journal & Voice Guide)
-        Surface(
-            shape = RoundedCornerShape(JourneyRadius.lg),
-            color = colors.surface,
-            border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.45f)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = JourneySpacing.md)
-                .clickable { onNavigate(JourneyScreenId.F3_TRIP_DETAIL) }
-        ) {
-            Row(
-                modifier = Modifier.padding(JourneySpacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = tr(lang, "ACTIVE EXPEDITION JOURNAL • DAY 8 OF 10", "NHẬT KÝ ĐANG DIỄN RA • NGÀY 8 / 10"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.accent
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = tr(lang, activeTrip.titleEn, activeTrip.titleVi),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.primaryText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${tr(lang, activeTrip.locationEn, activeTrip.locationVi)} • ${activeTrip.moments.size} moments logged",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.secondaryText
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                JourneyGhostButton(
-                    text = tr(lang, "Open Folio", "Mở Nhật ký"),
-                    onClick = { onNavigate(JourneyScreenId.F3_TRIP_DETAIL) }
-                )
-            }
-        }
-
-        if (!uiState.isMinimalViewEnabled) {
-            Spacer(modifier = Modifier.height(JourneySpacing.lg))
-
-            // 4. Quick Atelier Capabilities Strip
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
                     .padding(horizontal = JourneySpacing.md),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                listOf(
-                    Triple(tr(lang, "AI Visual Lens", "Ống kính AI"), Icons.Default.CameraAlt, JourneyScreenId.D1_AI_CAMERA),
-                    Triple(tr(lang, "AI Cultural Chat", "Trò chuyện AI"), Icons.Default.AutoAwesome, JourneyScreenId.E1_AI_CHAT),
-                    Triple(tr(lang, "Voice Travel Guide", "Thuyết minh Giọng nói"), Icons.Default.Mic, JourneyScreenId.E2_VOICE_ASSISTANT),
-                    Triple(tr(lang, "Cinematic Reel", "Dựng Phim 4K"), Icons.Default.MovieCreation, JourneyScreenId.H2_VIDEO_CREATOR),
-                    Triple(tr(lang, "Global Search", "Tìm kiếm"), Icons.Default.Search, JourneyScreenId.B2_GLOBAL_SEARCH)
-                ).forEach { (label, icon, targetScreen) ->
-                    Surface(
-                        shape = RoundedCornerShape(JourneyRadius.md),
-                        color = colors.surface,
-                        border = BorderStroke(1.dp, colors.border),
-                        modifier = Modifier.clickable { onNavigate(targetScreen) }
+                // Add My Locket Story item
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .width(68.dp)
+                        .clickable { onNavigate(JourneyScreenId.D1_AI_CAMERA) }
+                        .testTag("story_add_locket_btn")
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(62.dp)
+                            .clip(CircleShape)
+                            .background(colors.surface)
+                            .border(2.dp, colors.accent, CircleShape)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Chụp mới",
+                            tint = colors.accent,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = tr(lang, "Snap New", "Chụp mới"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.primaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Friends' Stories
+                uiState.friendStories.forEach { story ->
+                    val isSelectedStory = story.id == activeStoryId
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .width(68.dp)
+                            .clickable {
+                                activeStoryId = if (isSelectedStory) null else story.id
+                            }
+                            .testTag("story_item_${story.id}")
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(62.dp)
+                                .clip(CircleShape)
+                                .border(
+                                    width = if (isSelectedStory) 3.dp else 2.dp,
+                                    color = if (isSelectedStory) colors.sage else colors.accent,
+                                    shape = CircleShape
+                                )
+                                .padding(3.dp)
+                                .clip(CircleShape)
+                        ) {
+                            Image(
+                                painter = painterResource(id = story.photoRes),
+                                contentDescription = story.authorName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = story.authorName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.primaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        // Story Viewer Card (when a friend's story is tapped)
+        if (activeStory != null) {
+            Surface(
+                shape = RoundedCornerShape(JourneyRadius.xl),
+                color = colors.surface,
+                border = BorderStroke(1.5.dp, colors.accent),
+                shadowElevation = JourneyElevation.card,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = JourneySpacing.md, vertical = 8.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(colors.accentContainer, CircleShape)
+                            ) {
+                                Text(
+                                    text = activeStory.avatarInitials,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.accent
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = activeStory.authorName,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = colors.primaryText
+                                )
+                                Text(
+                                    text = "📍 ${activeStory.placeName} · ${activeStory.timeAgo}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.secondaryText
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { activeStoryId = null },
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = colors.accent,
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Đóng tin",
+                                tint = colors.secondaryText
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                    ) {
+                        Image(
+                            painter = painterResource(id = activeStory.photoRes),
+                            contentDescription = activeStory.placeName,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = Color(0xCC0F172A),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(12.dp)
+                        ) {
                             Text(
-                                text = label,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = colors.primaryText
+                                text = activeStory.caption,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JourneyPalette.Ivory,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                             )
                         }
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(JourneySpacing.xxl))
-
-            // 5. Spatial Heritage Filter & Landmarks List
-            Column(modifier = Modifier.padding(horizontal = JourneySpacing.md)) {
-                JourneySectionHeader(
-                    eyebrow = tr(lang, "SPATIAL HERITAGE", "DI SẢN QUANH BẠN"),
-                    title = tr(lang, "Stories Around Your Horizon", "Câu Chuyện Quanh Chân Trời"),
-                    actionLabel = tr(lang, "Explore Map", "Mở Bản đồ"),
-                    onActionClick = { onNavigate(JourneyScreenId.C1_EXPLORE_MAP) }
+        // 2. Bộ lọc Bảng tin (Tất cả / Bạn bè / Của tôi)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = JourneySpacing.md, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                "ALL" to tr(lang, "All Posts (${uiState.socialPosts.size})", "🌐 Tất cả (${uiState.socialPosts.size})"),
+                "FRIENDS" to tr(
+                    lang,
+                    "Friends (${uiState.socialPosts.count { !it.isMine }})",
+                    "👥 Bạn bè (${uiState.socialPosts.count { !it.isMine }})"
+                ),
+                "MINE" to tr(
+                    lang,
+                    "My Posts (${uiState.socialPosts.count { it.isMine }})",
+                    "👤 Của tôi (${uiState.socialPosts.count { it.isMine }})"
                 )
-                Spacer(modifier = Modifier.height(JourneySpacing.sm))
+            ).forEach { (key, label) ->
+                JourneyFilterChip(
+                    label = label,
+                    selected = uiState.socialFeedFilter == key,
+                    onClick = { onSetFeedFilter(key) }
+                )
+            }
+        }
 
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // 3. Danh sách Bài đăng Bảng tin (Locket-style Square Photo Feed)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            filteredPosts.forEach { post ->
+                val displayAuthor = if (post.isMine) uiState.userName else post.authorName
+                val displayInitials = if (post.isMine) uiState.userInitials else post.avatarInitials
+
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.border),
+                    shadowElevation = JourneyElevation.card,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("feed_post_card_${post.id}")
                 ) {
-                    listOf(
-                        "ALL" to tr(lang, "All Vietnam (4)", "Toàn Việt Nam (4)"),
-                        "NORTH" to tr(lang, "Northern Tonkin (3)", "Miền Bắc (3)"),
-                        "CENTRAL" to tr(lang, "Central Heritage (1)", "Miền Trung (1)"),
-                        "SAVED" to tr(lang, "Saved Atlas", "Đã lưu")
-                    ).forEach { (key, label) ->
-                        JourneyFilterChip(
-                            label = label,
-                            selected = selectedRegionFilter == key,
-                            onClick = { selectedRegionFilter = key }
-                        )
+                    Column {
+                        // Post Header
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.accentContainer, CircleShape)
+                                        .border(1.dp, colors.accent.copy(alpha = 0.5f), CircleShape)
+                                ) {
+                                    if (post.isMine && uiState.userAvatarUri != null) {
+                                        coil.compose.AsyncImage(
+                                            model = uiState.userAvatarUri,
+                                            contentDescription = displayAuthor,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Text(
+                                            text = displayInitials,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = colors.accent
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = displayAuthor,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = colors.primaryText
+                                        )
+                                        if (post.isMine) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(JourneyRadius.pill),
+                                                color = colors.accentContainer
+                                            ) {
+                                                Text(
+                                                    text = tr(lang, "You", "Bạn"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = colors.accent,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = "📍 ${post.placeName} · ${post.timeAgo}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.secondaryText,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.clickable {
+                                            onSelectPlace(post.placeId, false)
+                                            onNavigate(JourneyScreenId.C1_EXPLORE_MAP)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Square Locket Photo with Overlaid Caption Pill
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(310.dp)
+                                .background(JourneyPalette.DeepObsidian)
+                                .clickable { onToggleLikePost(post.id) }
+                        ) {
+                            if (post.photoUri != null) {
+                                coil.compose.AsyncImage(
+                                    model = post.photoUri,
+                                    contentDescription = post.caption,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Image(
+                                    painter = painterResource(id = post.photoRes),
+                                    contentDescription = post.caption,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            // Locket Overlaid Caption Pill
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color(0xBF0F172A),
+                                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                            ) {
+                                Text(
+                                    text = post.caption,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = JourneyPalette.Ivory,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+
+                        // Post Actions Bar (Like, Comment, View on Map)
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Surface(
+                                        shape = RoundedCornerShape(JourneyRadius.pill),
+                                        color = if (post.isLiked) Color(0x22DC2626) else colors.elevatedSurface,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (post.isLiked) Color(0x66DC2626) else colors.border
+                                        ),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                                            .clickable { onToggleLikePost(post.id) }
+                                            .testTag("like_btn_${post.id}")
+                                    ) {
+                                        Text(
+                                            text = "${if (post.isLiked) "❤️" else "🤍"} ${post.likesCount}",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = colors.primaryText,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(JourneyRadius.pill),
+                                        color = colors.elevatedSurface,
+                                        border = BorderStroke(1.dp, colors.border),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                                            .clickable {
+                                                commentingPostId = if (commentingPostId == post.id) null else post.id
+                                            }
+                                            .testTag("comment_btn_${post.id}")
+                                    ) {
+                                        Text(
+                                            text = "💬 ${post.comments.size} bình luận",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = colors.primaryText,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(JourneyRadius.pill),
+                                    color = colors.elevatedSurface,
+                                    border = BorderStroke(1.dp, colors.border),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(JourneyRadius.pill))
+                                        .clickable {
+                                            onSelectPlace(post.placeId, false)
+                                            onNavigate(JourneyScreenId.C1_EXPLORE_MAP)
+                                        }
+                                ) {
+                                    Text(
+                                        text = tr(lang, "🗺️ Map", "🗺️ Bản đồ"),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = colors.accent,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+
+                            // Comments Preview
+                            if (post.comments.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                post.comments.takeLast(3).forEach { c ->
+                                    Text(
+                                        text = "${c.authorName}: ${c.text}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.secondaryText,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            // Inline Comment Input Box
+                            if (commentingPostId == post.id) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        JourneyTextField(
+                                            value = commentDraft,
+                                            onValueChange = { commentDraft = it },
+                                            label = tr(lang, "Add comment", "Viết bình luận"),
+                                            placeholder = tr(lang, "Write something...", "Nhập bình luận..."),
+                                            testTag = "comment_input_${post.id}"
+                                        )
+                                    }
+                                    JourneyButton(
+                                        text = tr(lang, "Send", "Gửi"),
+                                        onClick = {
+                                            if (commentDraft.isNotBlank()) {
+                                                onAddComment(post.id, commentDraft)
+                                                commentDraft = ""
+                                                commentingPostId = null
+                                            }
+                                        },
+                                        variant = JourneyButtonVariant.PRIMARY
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(JourneySpacing.md))
-
-                filteredPlaces.forEach { place ->
-                    JourneyEditorialCard(
-                        imageRes = place.imageRes,
-                        tagText = tr(lang, place.categoryEn, place.categoryVi),
-                        title = tr(lang, place.nameEn, place.nameVi),
-                        subtitle = tr(lang, place.summaryEn, place.summaryVi),
-                        metaText = "${place.coordinates} • ${place.distanceKm} • AUDIO ${place.audioDuration}",
-                        isSaved = place.isSaved,
-                        onCardClick = { onSelectPlace(place.id, true) },
-                        onSaveClick = { onToggleSavePlace(place.id) },
-                        modifier = Modifier.padding(bottom = JourneySpacing.md),
-                        heightDp = 245,
-                        testTag = "home_place_card_${place.id}"
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(JourneySpacing.lg))
-
-            // 6. Discovery Collections Carousel
-            Column(modifier = Modifier.padding(horizontal = JourneySpacing.md)) {
-                JourneySectionHeader(
-                    eyebrow = tr(lang, "CURATED ANTHOLOGIES", "BỘ SƯU TẬP TUYỂN CHỌN"),
-                    title = tr(lang, "Discovery Collections", "Bộ Sưu Tập Khám Phá"),
-                    actionLabel = tr(lang, "See All", "Xem tất cả"),
-                    onActionClick = { onNavigate(JourneyScreenId.G1_DISCOVERY_COLLECTION) }
-                )
-                Spacer(modifier = Modifier.height(JourneySpacing.md))
-
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    uiState.collections.forEach { coll ->
-                        JourneyEditorialCard(
-                            imageRes = coll.coverRes,
-                            tagText = tr(lang, coll.badgeTagEn, coll.badgeTagVi),
-                            title = tr(lang, coll.titleEn, coll.titleVi),
-                            subtitle = tr(lang, coll.subtitleEn, coll.subtitleVi),
-                            metaText = "${coll.placeIds.size} CURATED MONUMENTS",
-                            onCardClick = { onSelectCollection(coll.id) },
-                            modifier = Modifier.width(290.dp),
-                            heightDp = 210
-                        )
-                    }
-                }
-            }
-        } else {
-            // Minimalist View Mode: Large focused buttons for AI Scan, Voice Guide & Today's Journal
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(JourneySpacing.md),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                JourneyPrimaryButton(
-                    text = tr(lang, "Open AI Camera Lens (Large View)", "Mở Ống Kính Quét Di Sản AI (Cỡ lớn)"),
-                    leadingIcon = Icons.Default.CameraAlt,
-                    onClick = { onNavigate(JourneyScreenId.D1_AI_CAMERA) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                JourneySecondaryButton(
-                    text = tr(lang, "Listen to Today's Voice Travel Guide", "Nghe Thuyết Minh Giọng Nói Hôm Nay"),
-                    leadingIcon = Icons.Default.GraphicEq,
-                    onClick = { onNavigate(JourneyScreenId.E2_VOICE_ASSISTANT) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                JourneySecondaryButton(
-                    text = tr(lang, "Log Daily Moment in Travel Journal", "Ghi Khoảnh Khắc Vào Nhật Ký Hôm Nay"),
-                    onClick = { onNavigate(JourneyScreenId.F5_CREATE_DAILY_MOMENT) },
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }
@@ -643,8 +779,7 @@ fun NotificationsScreen(
 }
 
 // ============================================================================
-// PHASE 2 — SCREEN C1: INTERACTIVE EXPLORE MAP
-// Custom Topographic Contour Map + Search/Filter Overlay + Spatial Pins + Place Sheet
+// PHASE 2 — SCREEN C1: VISITED PLACES MAP (KHÁM PHÁ: BẢN ĐỒ NHỮNG NƠI ĐÃ ĐI / ĐÃ ĐẾN)
 // ============================================================================
 @Composable
 fun ExploreMapScreen(
@@ -656,42 +791,53 @@ fun ExploreMapScreen(
     val colors = JourneyTheme.colors
     val lang = uiState.language
     val activePlace = uiState.selectedPlace
-    var mapLayerStyle by remember { mutableStateOf("TOPO_DARK") }
+    val myCheckinsCount = uiState.socialPosts.count { it.isMine }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 28.dp)
             .testTag("screen_c1_explore_map")
     ) {
-        JourneyTopBar(
-            screenId = JourneyScreenId.C1_EXPLORE_MAP,
-            language = lang,
-            trailingContent = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    JourneySecondaryButton(
-                        text = tr(lang, "Feed", "Bảng tin"),
-                        onClick = { onNavigate(JourneyScreenId.C2_DISCOVERY_FEED) }
-                    )
-                    JourneyButton(
-                        text = tr(lang, "Saved", "Đã lưu"),
-                        variant = JourneyButtonVariant.SURFACE_TONAL,
-                        onClick = { onNavigate(JourneyScreenId.C4_SAVED_PLACES) }
-                    )
-                }
-            }
-        )
+        // 1. Thống kê Dấu chân Hành trình (Visited Stats Row)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            JourneyStatPillCard(
+                value = "${uiState.places.size}",
+                label = tr(lang, "Visited", "Nơi đã đến"),
+                sublabel = tr(lang, "Landmarks", "Cột mốc"),
+                modifier = Modifier.weight(1f)
+            )
+            JourneyStatPillCard(
+                value = "4",
+                label = tr(lang, "Provinces", "Tỉnh / Thành"),
+                sublabel = tr(lang, "Vietnam", "Việt Nam"),
+                modifier = Modifier.weight(1f)
+            )
+            JourneyStatPillCard(
+                value = "$myCheckinsCount",
+                label = tr(lang, "Check-ins", "Ảnh Check-in"),
+                sublabel = tr(lang, "Memories", "Kỷ niệm"),
+                modifier = Modifier.weight(1f)
+            )
+        }
 
-        // Interactive Topographic Map Canvas + Spatial Pins
+        // 2. Bản đồ những nơi đã đi / đã đến (Interactive Footprint Map)
         Box(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
+                .height(370.dp)
                 .padding(horizontal = JourneySpacing.md)
                 .clip(RoundedCornerShape(JourneyRadius.xl))
-                .background(if (mapLayerStyle == "TOPO_DARK") JourneyPalette.DeepObsidian else Color(0xFF192730))
+                .background(JourneyPalette.DeepObsidian)
                 .border(1.dp, colors.border, RoundedCornerShape(JourneyRadius.xl))
         ) {
-            // Custom Topographic Contour Lines, Route Path & Radar Pulse
+            // Topographic Contour Lines & Visited Route Path
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
@@ -707,13 +853,12 @@ fun ExploreMapScreen(
                     drawLine(gridColor, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
                 }
 
-                // Stylized topographic elevation rings centered on active place
                 val cx = w * activePlace.mapXPercent
                 val cy = h * activePlace.mapYPercent
-                for (r in 1..4) {
+                for (r in 1..3) {
                     drawCircle(
                         color = goldLine,
-                        radius = (r * 65f),
+                        radius = (r * 55f),
                         center = Offset(cx, cy),
                         style = Stroke(
                             width = 1.5f,
@@ -722,57 +867,39 @@ fun ExploreMapScreen(
                     )
                 }
 
-                // Expedition route line connecting Vietnam heritage points
                 val routePoints = uiState.places.map { Offset(w * it.mapXPercent, h * it.mapYPercent) }
                 for (k in 0 until routePoints.size - 1) {
                     drawLine(
-                        color = Color(0x88B99B72),
+                        color = Color(0x99B99B72),
                         start = routePoints[k],
                         end = routePoints[k + 1],
-                        strokeWidth = 3f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                        strokeWidth = 3.5f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
                     )
                 }
             }
 
-            // Top Map Layer & Telemetry Controls
+            // Map Header Badge
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(JourneySpacing.md),
+                    .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 JourneyBadgePill(
-                    text = tr(lang, "VIETNAM HERITAGE ATLAS • POSTGIS 4326", "BẢN ĐỒ DI SẢN VIỆT NAM • POSTGIS 4326"),
+                    text = tr(lang, "🗺️ VISITED FOOTPRINT MAP", "🗺️ BẢN ĐỒ NHỮNG NƠI ĐÃ ĐI"),
                     containerColor = Color(0xCC111923),
                     contentColor = JourneyPalette.SandGold
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(JourneyRadius.pill),
-                        color = Color(0xCC1C2934),
-                        border = BorderStroke(1.dp, JourneyPalette.SandGold.copy(alpha = 0.5f)),
-                        modifier = Modifier.clickable {
-                            mapLayerStyle = if (mapLayerStyle == "TOPO_DARK") "SATELLITE_CONTOUR" else "TOPO_DARK"
-                        }
-                    ) {
-                        Text(
-                            text = if (mapLayerStyle == "TOPO_DARK") "Topo Dark" else "Bathymetry",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = JourneyPalette.Ivory,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
             }
 
-            // Interactive Landmark Pins list on Map
+            // Interactive Visited Pins on Map
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 56.dp, start = 16.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(top = 48.dp, start = 12.dp, end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 uiState.places.forEach { place ->
                     val isSelected = place.id == activePlace.id
@@ -790,32 +917,32 @@ fun ExploreMapScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Icon(
                                 imageVector = if (isSelected) Icons.Default.MyLocation else Icons.Default.LocationOn,
-                                contentDescription = place.nameEn,
+                                contentDescription = place.nameVi,
                                 tint = if (isSelected) JourneyPalette.Midnight else JourneyPalette.SandGold,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = tr(lang, place.nameEn, place.nameVi),
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = if (isSelected) JourneyPalette.Midnight else JourneyPalette.Ivory
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = place.distanceKm,
+                                text = "✓ Đã đến",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) JourneyPalette.Midnight.copy(alpha = 0.75f) else JourneyPalette.SandGold
+                                color = if (isSelected) JourneyPalette.Midnight.copy(alpha = 0.8f) else JourneyPalette.SandGold
                             )
                         }
                     }
                 }
             }
 
-            // Bottom Selected Place Preview Sheet inside Map (FLOW 4: Select Place -> Place Detail -> Ask AI -> Save Place)
+            // Bottom Selected Visited Place Card inside Map
             Surface(
                 shape = RoundedCornerShape(JourneyRadius.lg),
                 color = colors.surface.copy(alpha = 0.96f),
@@ -824,65 +951,134 @@ fun ExploreMapScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(JourneySpacing.md)
+                    .padding(12.dp)
             ) {
-                Column(modifier = Modifier.padding(JourneySpacing.md)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = activePlace.imageRes),
+                        contentDescription = activePlace.nameVi,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "✓ ĐÃ ĐẶT CHÂN TỚI • ${activePlace.regionVi}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.sage
+                        )
+                        Text(
+                            text = tr(lang, activePlace.nameEn, activePlace.nameVi),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colors.primaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = activePlace.coordinates,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondaryText
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    JourneyPrimaryButton(
+                        text = tr(lang, "Details", "Chi tiết"),
+                        onClick = { onSelectPlace(activePlace.id, true) },
+                        testTag = "map_open_place_detail_btn"
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 3. Danh sách Cột mốc Đã đặt chân tới
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = tr(lang, "Visited Milestones (${uiState.places.size})", "Cột Mốc Đã Đặt Chân Tới (${uiState.places.size})"),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.primaryText
+                )
+                Text(
+                    text = tr(lang, "View Check-ins →", "Xem ảnh Check-in →"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.accent,
+                    modifier = Modifier.clickable { onNavigate(JourneyScreenId.F1_JOURNAL_HOME) }
+                )
+            }
+
+            uiState.places.forEach { place ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = colors.surface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (place.id == activePlace.id) colors.accent else colors.border
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectPlace(place.id, false) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Image(
-                            painter = painterResource(id = activePlace.imageRes),
-                            contentDescription = activePlace.nameEn,
+                            painter = painterResource(id = place.imageRes),
+                            contentDescription = place.nameVi,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .size(78.dp)
-                                .clip(RoundedCornerShape(JourneyRadius.md))
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(12.dp))
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${activePlace.coordinates} • ${activePlace.distanceKm}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colors.accent
-                            )
-                            Text(
-                                text = tr(lang, activePlace.nameEn, activePlace.nameVi),
-                                style = MaterialTheme.typography.titleLarge,
+                                text = tr(lang, place.nameEn, place.nameVi),
+                                style = MaterialTheme.typography.titleSmall,
                                 color = colors.primaryText,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = tr(lang, activePlace.regionEn, activePlace.regionVi),
+                                text = "📍 ${place.regionVi} · ${place.coordinates}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = colors.secondaryText
+                                color = colors.secondaryText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
-                        IconButton(onClick = { onToggleSavePlace(activePlace.id) }) {
-                            Icon(
-                                imageVector = if (activePlace.isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                contentDescription = "Save Place",
-                                tint = colors.accent
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = colors.accentContainer,
+                            modifier = Modifier.clickable { onSelectPlace(place.id, true) }
+                        ) {
+                            Text(
+                                text = tr(lang, "View", "Xem"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.accent,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        JourneyPrimaryButton(
-                            text = tr(lang, "Explore Place Details", "Xem Chi tiết Điểm đến"),
-                            onClick = { onSelectPlace(activePlace.id, true) },
-                            modifier = Modifier.weight(1f),
-                            testTag = "map_open_place_detail_btn"
-                        )
-                        JourneySecondaryButton(
-                            text = tr(lang, "Ask AI", "Hỏi AI"),
-                            leadingIcon = Icons.Default.AutoAwesome,
-                            onClick = { onNavigate(JourneyScreenId.E1_AI_CHAT) },
-                            testTag = "map_ask_ai_btn"
-                        )
                     }
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 

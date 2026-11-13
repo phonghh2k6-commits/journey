@@ -112,8 +112,7 @@ import java.util.Locale
 import kotlin.math.sin
 
 // ============================================================================
-// D1: REAL HARDWARE AI CAMERA & PHOTO PICKER SCREEN
-// Uses CameraX PreviewView when CAMERA permission is granted + Android Photo Picker
+// D1: LOCKET-STYLE INSTANT CAMERA SCREEN (CHỈ CHUYÊN CHỤP ẢNH NHƯ CAMERA CỦA LOCKET)
 // ============================================================================
 @Composable
 fun AiCameraScreen(
@@ -121,12 +120,18 @@ fun AiCameraScreen(
     onBack: () -> Unit,
     onSelectPlace: (String, Boolean) -> Unit,
     onImagePicked: (String?) -> Unit,
-    onNavigate: (JourneyScreenId) -> Unit
+    onNavigate: (JourneyScreenId) -> Unit,
+    onPublishLocketPost: (String, String, String?) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val colors = JourneyTheme.colors
     val lang = uiState.language
     val place = uiState.selectedPlace
+
+    var isPhotoCaptured by remember { mutableStateOf(uiState.capturedImageUri != null) }
+    var captionText by remember { mutableStateOf("") }
+    var useFrontCamera by remember { mutableStateOf(false) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -141,12 +146,12 @@ fun AiCameraScreen(
         hasCameraPermission = granted
     }
 
-    // Zero-permission Android Photo Picker per Google Play policy
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             onImagePicked(uri.toString())
+            isPhotoCaptured = true
         }
     }
 
@@ -156,170 +161,189 @@ fun AiCameraScreen(
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(JourneyPalette.DeepObsidian)
-            .testTag("screen_d1_ai_camera")
+            .background(colors.primaryBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = JourneySpacing.md, vertical = 10.dp)
+            .testTag("screen_d1_ai_camera"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (hasCameraPermission) {
-            // Real CameraX hardware preview with graceful fallback
-            AndroidView(
-                factory = { ctx ->
-                    val previewView = PreviewView(ctx).apply {
-                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                    }
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                    cameraProviderFuture.addListener({
-                        runCatching {
-                            val cameraProvider = cameraProviderFuture.get()
-                            val preview = Preview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-                            cameraProvider.unbindAll()
-                            cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
-                                CameraSelector.DEFAULT_BACK_CAMERA,
-                                preview
-                            )
-                        }
-                    }, ContextCompat.getMainExecutor(ctx))
-                    previewView
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Image(
-                painter = painterResource(id = place.imageRes),
-                contentDescription = place.nameEn,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0x440B1017))
-        )
-
-        // Precision Architectural Viewfinder Reticle Canvas
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val boxW = w * 0.76f
-            val boxH = h * 0.44f
-            val left = (w - boxW) / 2f
-            val top = (h - boxH) / 2.3f
-
-            drawRoundRect(
-                color = Color(0x99B99B72),
-                topLeft = Offset(left, top),
-                size = Size(boxW, boxH),
-                cornerRadius = CornerRadius(24.dp.toPx(), 24.dp.toPx()),
-                style = Stroke(width = 2.dp.toPx())
-            )
-
-            val cx = w / 2f
-            val cy = top + boxH / 2f
-            drawLine(Color(0xCCB99B72), Offset(cx - 24f, cy), Offset(cx + 24f, cy), strokeWidth = 2f)
-            drawLine(Color(0xCCB99B72), Offset(cx, cy - 24f), Offset(cx, cy + 24f), strokeWidth = 2f)
-        }
-
-        // Top Viewfinder HUD
+        // 1. Top Bar: Chọn nhanh địa điểm đang đứng + Nhãn LOCKET CAM
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(JourneySpacing.lg),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(Color(0xAA111923), CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close Camera",
-                    tint = JourneyPalette.Ivory
+            Text(
+                text = tr(lang, "📍 Select Check-in Spot:", "📍 Chọn nơi đang đứng:"),
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.primaryText
+            )
+            JourneyBadgePill(
+                text = "● LOCKET CAM",
+                containerColor = colors.accentContainer,
+                contentColor = colors.accent
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            uiState.places.forEach { item ->
+                val active = item.id == place.id
+                Surface(
+                    shape = RoundedCornerShape(JourneyRadius.pill),
+                    color = if (active) colors.accent else colors.surface,
+                    border = BorderStroke(1.dp, if (active) colors.accent else colors.border),
+                    modifier = Modifier.clickable { onSelectPlace(item.id, false) }
+                ) {
+                    Text(
+                        text = item.nameVi.take(14),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (active) colors.onAccent else colors.primaryText,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        // 2. Khung ngắm vuông 1:1 bo góc tròn chuẩn Locket (Rounded Square Viewfinder)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(340.dp)
+                .clip(RoundedCornerShape(36.dp))
+                .background(JourneyPalette.DeepObsidian)
+                .border(3.dp, colors.accent.copy(alpha = 0.7f), RoundedCornerShape(36.dp))
+        ) {
+            if (!isPhotoCaptured && hasCameraPermission) {
+                AndroidView(
+                    factory = { ctx ->
+                        val previewView = PreviewView(ctx).apply {
+                            scaleType = PreviewView.ScaleType.FILL_CENTER
+                        }
+                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                        cameraProviderFuture.addListener({
+                            runCatching {
+                                val cameraProvider = cameraProviderFuture.get()
+                                val preview = Preview.Builder().build().also {
+                                    it.setSurfaceProvider(previewView.surfaceProvider)
+                                }
+                                val selector = if (useFrontCamera) {
+                                    CameraSelector.DEFAULT_FRONT_CAMERA
+                                } else {
+                                    CameraSelector.DEFAULT_BACK_CAMERA
+                                }
+                                cameraProvider.unbindAll()
+                                cameraProvider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    selector,
+                                    preview
+                                )
+                            }
+                        }, ContextCompat.getMainExecutor(ctx))
+                        previewView
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (uiState.capturedImageUri != null) {
+                AsyncImage(
+                    model = uiState.capturedImageUri,
+                    contentDescription = place.nameVi,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = place.imageRes),
+                    contentDescription = place.nameVi,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
-            JourneyBadgePill(
-                text = "AI LENS ACTIVE • ${uiState.liveGpsCoordinates ?: place.coordinates}",
-                containerColor = Color(0xCC111923),
-                contentColor = JourneyPalette.SandGold
-            )
-            IconButton(
-                onClick = {
-                    if (!hasCameraPermission) {
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
-                },
+
+            // Top badge inside Locket viewfinder
+            Surface(
+                shape = RoundedCornerShape(JourneyRadius.pill),
+                color = Color(0xAA0F172A),
                 modifier = Modifier
-                    .size(44.dp)
-                    .background(Color(0xAA111923), CircleShape)
+                    .align(Alignment.TopStart)
+                    .padding(14.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.FlashOn,
-                    contentDescription = "Flash",
-                    tint = JourneyPalette.SandGold
+                Text(
+                    text = if (isPhotoCaptured) {
+                        tr(lang, "✨ Photo Ready to Post", "✨ Ảnh đã chụp — Sẵn sàng đăng")
+                    } else {
+                        "📍 ${place.nameVi}"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = JourneyPalette.Ivory,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+
+            // Bottom Caption Overlay inside Locket Viewfinder
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(14.dp)
+            ) {
+                JourneyTextField(
+                    value = captionText,
+                    onValueChange = { captionText = it },
+                    label = tr(lang, "Locket Caption", "Ghi chú lên ảnh Locket"),
+                    placeholder = tr(
+                        lang,
+                        "Write a caption for your friends...",
+                        "Viết ghi chú khoảnh khắc tại ${place.nameVi}..."
+                    ),
+                    testTag = "locket_caption_input"
                 )
             }
         }
 
-        // Bottom Camera Controls & Target Selector
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color(0xEE0B1017))
-                    )
-                )
-                .padding(JourneySpacing.xl)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                uiState.places.forEach { item ->
-                    val active = item.id == place.id
-                    Surface(
-                        shape = RoundedCornerShape(JourneyRadius.pill),
-                        color = if (active) JourneyPalette.SandGold else Color(0xAA1C2934),
-                        modifier = Modifier.clickable { onSelectPlace(item.id, false) }
-                    ) {
-                        Text(
-                            text = item.nameVi.take(16),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (active) JourneyPalette.Midnight else JourneyPalette.Ivory,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-            }
-
-            Text(
-                text = tr(
-                    lang,
-                    "Locked: ${place.nameEn} • Tap Shutter or Pick from Gallery",
-                    "Mục tiêu: ${place.nameVi} • Chạm nút chụp hoặc chọn ảnh từ Thư viện"
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = JourneyPalette.Ivory
-            )
-            Spacer(modifier = Modifier.height(18.dp))
-
+        // 3. Cụm nút điều khiển Locket bên dưới khung ngắm
+        if (isPhotoCaptured) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                JourneyButton(
+                    text = tr(lang, "Retake", "🔄 Chụp lại"),
+                    variant = JourneyButtonVariant.SECONDARY,
+                    onClick = {
+                        isPhotoCaptured = false
+                        onImagePicked(null)
+                    },
+                    modifier = Modifier.weight(1f),
+                    testTag = "locket_retake_btn"
+                )
+                JourneyButton(
+                    text = tr(lang, "🚀 Post to Feed", "🚀 Đăng lên Bảng tin"),
+                    variant = JourneyButtonVariant.PRIMARY,
+                    onClick = {
+                        onPublishLocketPost(captionText, place.id, uiState.capturedImageUri)
+                        captionText = ""
+                        isPhotoCaptured = false
+                    },
+                    modifier = Modifier.weight(1.5f),
+                    testTag = "locket_publish_btn"
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Real Android Photo Picker Launcher
+                // Left: Pick Photo from Gallery
                 IconButton(
                     onClick = {
                         photoPickerLauncher.launch(
@@ -327,50 +351,68 @@ fun AiCameraScreen(
                         )
                     },
                     modifier = Modifier
-                        .size(50.dp)
-                        .background(Color(0xAA1C2934), CircleShape)
+                        .size(54.dp)
+                        .background(colors.surface, CircleShape)
+                        .border(1.dp, colors.border, CircleShape)
                         .testTag("camera_gallery_picker_btn")
                 ) {
                     Icon(
                         imageVector = Icons.Default.PhotoLibrary,
-                        contentDescription = "Pick from Gallery",
-                        tint = JourneyPalette.Ivory
+                        contentDescription = "Chọn ảnh từ máy",
+                        tint = colors.primaryText
                     )
                 }
 
-                // Prominent Sand Gold Shutter Button
+                // Center: Prominent Circular Locket Shutter Button
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(82.dp)
                         .clip(CircleShape)
-                        .border(3.dp, JourneyPalette.SandGold, CircleShape)
-                        .clickable { onImagePicked(null) }
-                        .padding(6.dp)
-                        .background(JourneyPalette.Ivory, CircleShape)
+                        .border(4.dp, colors.accent, CircleShape)
+                        .clickable { isPhotoCaptured = true }
+                        .padding(7.dp)
+                        .background(colors.primaryText, CircleShape)
                         .testTag("camera_shutter_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Capture Monument",
-                        tint = JourneyPalette.Midnight,
+                        contentDescription = "Chụp ảnh Locket",
+                        tint = colors.primaryBackground,
                         modifier = Modifier.size(30.dp)
                     )
                 }
 
+                // Right: Flip Camera / Switch Angle
                 IconButton(
-                    onClick = { onNavigate(JourneyScreenId.E2_VOICE_ASSISTANT) },
+                    onClick = {
+                        useFrontCamera = !useFrontCamera
+                        val nextIdx = (uiState.places.indexOfFirst { it.id == place.id } + 1) % uiState.places.size
+                        onSelectPlace(uiState.places[nextIdx].id, false)
+                    },
                     modifier = Modifier
-                        .size(50.dp)
-                        .background(Color(0xAA1C2934), CircleShape)
+                        .size(54.dp)
+                        .background(colors.surface, CircleShape)
+                        .border(1.dp, colors.border, CircleShape)
+                        .testTag("camera_flip_btn")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Voice Guide",
-                        tint = JourneyPalette.SandGold
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Đổi góc máy / Camera trước sau",
+                        tint = colors.accent
                     )
                 }
             }
+
+            Text(
+                text = tr(
+                    lang,
+                    "Tap the center circle to snap or pick a photo from gallery",
+                    "Chạm nút tròn ở giữa để chụp ngay hoặc chọn ảnh từ thư viện máy"
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryText
+            )
         }
     }
 }
