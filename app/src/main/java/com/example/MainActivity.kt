@@ -373,7 +373,9 @@ private fun JourneyScreenRouter(
             onSelectCollection = { viewModel.selectCollection(it) },
             onSetFeedFilter = { viewModel.setSocialFeedFilter(it) },
             onToggleLikePost = { viewModel.toggleLikePost(it) },
-            onAddComment = { postId, text -> viewModel.addPostComment(postId, text) }
+            onAddComment = { postId, text -> viewModel.addPostComment(postId, text) },
+            onDeletePost = { viewModel.deleteMoment(it) },
+            onRefreshFeed = { viewModel.refreshFriendsLocketFeed() }
         )
 
         JourneyScreenId.B2_GLOBAL_SEARCH -> GlobalSearchScreen(
@@ -426,8 +428,8 @@ private fun JourneyScreenRouter(
             onSelectPlace = { id, openDetail -> viewModel.selectPlace(id, openDetail) },
             onImagePicked = { uriStr -> viewModel.setCapturedImageUri(uriStr) },
             onNavigate = { viewModel.navigateTo(it) },
-            onPublishLocketPost = { caption, placeId, uri ->
-                viewModel.publishLocketPost(caption, placeId, uri)
+            onPublishLocketPost = { caption, placeId, uri, privacy, isVideo, duration ->
+                viewModel.publishLocketPost(caption, placeId, uri, privacy, isVideo, duration)
             }
         )
 
@@ -482,7 +484,8 @@ private fun JourneyScreenRouter(
         JourneyScreenId.F1_JOURNAL_HOME -> JournalHomeScreen(
             uiState = uiState,
             onSelectTrip = { viewModel.selectTrip(it, openDetails = true) },
-            onNavigate = { viewModel.navigateTo(it) }
+            onNavigate = { viewModel.navigateTo(it) },
+            onDeleteMoment = { viewModel.deleteMoment(it) }
         )
 
         JourneyScreenId.F2_CREATE_TRIP -> CreateTripScreen(

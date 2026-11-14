@@ -2,12 +2,25 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +40,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,13 +98,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.delay
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.example.model.AppLanguage
@@ -111,8 +129,87 @@ import com.example.viewmodel.JourneyUiState
 import java.util.Locale
 import kotlin.math.sin
 
+/**
+ * Automatically overlays and burns the current date, time, location name, and GPS coordinates
+ * onto a 720x720 1:1 square photo taken with the Locket camera.
+ */
+private fun burnDateAndLocationStampOnBitmap(
+    context: Context,
+    imageResId: Int,
+    sourceUriString: String?,
+    locationLabel: String,
+    coordsLabel: String,
+    dateTimeLabel: String
+): String? {
+    return runCatching {
+        val rawBitmap = if (!sourceUriString.isNullOrBlank()) {
+            val parsedUri = Uri.parse(sourceUriString)
+            context.contentResolver.openInputStream(parsedUri)?.use { stream ->
+                BitmapFactory.decodeStream(stream)
+            }
+        } else {
+            null
+        } ?: BitmapFactory.decodeResource(context.resources, imageResId) ?: return null
+
+        val targetSize = 720
+        val minDim = minOf(rawBitmap.width, rawBitmap.height).coerceAtLeast(1)
+        val cropX = ((rawBitmap.width - minDim) / 2).coerceAtLeast(0)
+        val cropY = ((rawBitmap.height - minDim) / 2).coerceAtLeast(0)
+        val cropped = Bitmap.createBitmap(rawBitmap, cropX, cropY, minDim, minDim)
+        val output = Bitmap.createScaledBitmap(cropped, targetSize, targetSize, true)
+            .copy(Bitmap.Config.ARGB_8888, true)
+
+        val canvas = AndroidCanvas(output)
+
+        // Draw semi-transparent pill background for the Date & Location Timestamp Stamp
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(196, 15, 23, 42)
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(210, 212, 175, 55)
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+
+        val pillRect = RectF(24f, targetSize - 178f, targetSize - 24f, targetSize - 94f)
+        canvas.drawRoundRect(pillRect, 22f, 22f, bgPaint)
+        canvas.drawRoundRect(pillRect, 22f, 22f, borderPaint)
+
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(245, 230, 179)
+            textSize = 23f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = 19f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+
+        canvas.drawText(
+            "📍 ${locationLabel.take(36)}",
+            44f,
+            targetSize - 142f,
+            titlePaint
+        )
+        canvas.drawText(
+            "📅 $dateTimeLabel · 🧭 ${coordsLabel.take(26)}",
+            44f,
+            targetSize - 112f,
+            subPaint
+        )
+
+        val outFile = File(context.cacheDir, "locket_stamped_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(outFile).use { fos ->
+            output.compress(Bitmap.CompressFormat.JPEG, 92, fos)
+        }
+        Uri.fromFile(outFile).toString()
+    }.getOrNull()
+}
+
 // ============================================================================
-// D1: LOCKET-STYLE INSTANT CAMERA SCREEN (CHỈ CHUYÊN CHỤP ẢNH NHƯ CAMERA CỦA LOCKET)
+// D1: LOCKET-STYLE CAMERA SCREEN (CHỤP 1 LẦN HOẶC ẤN GIỮ 5-10S QUAY VIDEO + CHỌN QUYỀN RIÊNG TƯ)
 // ============================================================================
 @Composable
 fun AiCameraScreen(
@@ -121,7 +218,7 @@ fun AiCameraScreen(
     onSelectPlace: (String, Boolean) -> Unit,
     onImagePicked: (String?) -> Unit,
     onNavigate: (JourneyScreenId) -> Unit,
-    onPublishLocketPost: (String, String, String?) -> Unit = { _, _, _ -> }
+    onPublishLocketPost: (String, String, String?, String, Boolean, Int) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -130,36 +227,128 @@ fun AiCameraScreen(
     val place = uiState.selectedPlace
 
     var isPhotoCaptured by remember { mutableStateOf(uiState.capturedImageUri != null) }
+    var isVideoMode by remember { mutableStateOf(false) }
+    var isRecordingVideo by remember { mutableStateOf(false) }
+    var recordedSeconds by remember { mutableStateOf(0) }
     var captionText by remember { mutableStateOf("") }
     var useFrontCamera by remember { mutableStateOf(false) }
+    var capturedTimestampText by remember {
+        mutableStateOf(
+            SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()).format(Date())
+        )
+    }
+    val activeCoordinatesText = uiState.liveGpsCoordinates?.takeIf { it.isNotBlank() } ?: place.coordinates
 
+    // Privacy & Audience selector state
+    var privacyMode by remember { mutableStateOf("PUBLIC") } // PUBLIC | CUSTOM | PRIVATE
+    var selectedFriends by remember { mutableStateOf(setOf("Lan Anh", "Hoàng Nam")) }
+    val allFriends = listOf("Lan Anh", "Hoàng Nam", "Thảo Tiên", "Tuấn Kiệt")
+
+    // Camera & Microphone Permission State
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED
         )
     }
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var hasRequestedInitialPermissions by remember { mutableStateOf(false) }
+    var permissionDeniedOnce by remember { mutableStateOf(false) }
+    var bypassPermissionGate by remember { mutableStateOf(false) }
 
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
+    val cameraAndMicPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissionsMap ->
+        val camGranted = permissionsMap[Manifest.permission.CAMERA]
+            ?: (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+        val micGranted = permissionsMap[Manifest.permission.RECORD_AUDIO]
+            ?: (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+        hasCameraPermission = camGranted
+        hasMicPermission = micGranted
+        if (!camGranted || !micGranted) {
+            permissionDeniedOnce = true
+        }
+    }
+
+    // Re-check permissions when returning from system Settings
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasCameraPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+                hasMicPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            onImagePicked(uri.toString())
+            val freshTimestamp = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()).format(Date())
+            capturedTimestampText = freshTimestamp
+            val stampedUri = burnDateAndLocationStampOnBitmap(
+                context = context,
+                imageResId = place.imageRes,
+                sourceUriString = uri.toString(),
+                locationLabel = "${place.nameVi}, ${place.regionVi}",
+                coordsLabel = activeCoordinatesText,
+                dateTimeLabel = freshTimestamp
+            ) ?: uri.toString()
+            onImagePicked(stampedUri)
+            isVideoMode = false
             isPhotoCaptured = true
+            bypassPermissionGate = true
         }
     }
 
     LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        if ((!hasCameraPermission || !hasMicPermission) && !hasRequestedInitialPermissions) {
+            hasRequestedInitialPermissions = true
+            cameraAndMicPermissionLauncher.launch(
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+            )
         }
     }
+
+    // Hold-to-record 5-10s timer
+    LaunchedEffect(isRecordingVideo) {
+        if (isRecordingVideo) {
+            recordedSeconds = 0
+            while (isRecordingVideo && recordedSeconds < 10) {
+                delay(1000L)
+                recordedSeconds += 1
+            }
+            if (isRecordingVideo && recordedSeconds >= 10) {
+                isRecordingVideo = false
+                isVideoMode = true
+                isPhotoCaptured = true
+            }
+        }
+    }
+
+    val computedPrivacyLabel = when (privacyMode) {
+        "PRIVATE" -> "🔒 Chỉ mình tôi"
+        "CUSTOM" -> "👥 Chỉ: ${selectedFriends.joinToString(", ").ifEmpty { "Bạn bè" }}"
+        else -> "🌎 Tất cả bạn bè"
+    }
+
+    val isAllPermissionsGranted = hasCameraPermission && hasMicPermission
+    val showPermissionGate = !isAllPermissionsGranted && !bypassPermissionGate && !isPhotoCaptured
 
     Column(
         modifier = Modifier
@@ -171,7 +360,7 @@ fun AiCameraScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Top Bar: Chọn nhanh địa điểm đang đứng + Nhãn LOCKET CAM
+        // 1. Top Bar: Chọn nhanh địa điểm đang đứng + Nhãn LOCKET CAM / REC
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -183,9 +372,14 @@ fun AiCameraScreen(
                 color = colors.primaryText
             )
             JourneyBadgePill(
-                text = "● LOCKET CAM",
-                containerColor = colors.accentContainer,
-                contentColor = colors.accent
+                text = when {
+                    isRecordingVideo -> "🔴 REC ${recordedSeconds}s / 10s"
+                    isAllPermissionsGranted -> "● LOCKET CAM & MIC READY"
+                    hasCameraPermission -> "● CAM READY (MIC OFF)"
+                    else -> "🔒 CẦN QUYỀN TRUY CẬP"
+                },
+                containerColor = if (isRecordingVideo) Color(0x33DC2626) else colors.accentContainer,
+                contentColor = if (isRecordingVideo) Color(0xFFEF4444) else colors.accent
             )
         }
 
@@ -211,46 +405,320 @@ fun AiCameraScreen(
             }
         }
 
-        // 2. Khung ngắm vuông 1:1 bo góc tròn chuẩn Locket (Rounded Square Viewfinder)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(340.dp)
-                .clip(RoundedCornerShape(36.dp))
-                .background(JourneyPalette.DeepObsidian)
-                .border(3.dp, colors.accent.copy(alpha = 0.7f), RoundedCornerShape(36.dp))
-        ) {
-            if (!isPhotoCaptured && hasCameraPermission) {
-                AndroidView(
-                    factory = { ctx ->
-                        val previewView = PreviewView(ctx).apply {
-                            scaleType = PreviewView.ScaleType.FILL_CENTER
-                        }
-                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                        cameraProviderFuture.addListener({
-                            runCatching {
-                                val cameraProvider = cameraProviderFuture.get()
-                                val preview = Preview.Builder().build().also {
-                                    it.setSurfaceProvider(previewView.surfaceProvider)
+        // 1B. Graceful Camera & Microphone Permission Gate before opening Locket Camera View
+        if (showPermissionGate) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = colors.surface,
+                border = BorderStroke(1.5.dp, colors.accent.copy(alpha = 0.6f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("locket_permission_gate_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(colors.accentContainer, CircleShape)
+                            .border(1.dp, colors.accent, CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Cấp quyền Camera & Micro",
+                            tint = colors.accent,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    Text(
+                        text = tr(
+                            lang,
+                            "Camera & Microphone Access Required",
+                            "Cấp quyền Máy ảnh & Micro cho Locket"
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colors.primaryText
+                    )
+
+                    Text(
+                        text = tr(
+                            lang,
+                            "To snap 1:1 Locket photos and hold 5–10s to record short videos with audio, please allow Camera and Microphone permissions.",
+                            "Để mở khung ngắm Locket 1:1 chụp ảnh tức thì và ấn giữ 5–10 giây quay video kèm âm thanh, ứng dụng cần quyền truy cập Máy ảnh và Micro của bạn."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondaryText
+                    )
+
+                    // Permission Checklist
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = colors.elevatedSurface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (hasCameraPermission) colors.sage else colors.border
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        tint = if (hasCameraPermission) colors.sage else colors.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "📷 Máy ảnh (Camera)",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = colors.primaryText
+                                        )
+                                        Text(
+                                            text = "Hiển thị khung ngắm 1:1 & chụp khoảnh khắc",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colors.secondaryText
+                                        )
+                                    }
                                 }
-                                val selector = if (useFrontCamera) {
-                                    CameraSelector.DEFAULT_FRONT_CAMERA
-                                } else {
-                                    CameraSelector.DEFAULT_BACK_CAMERA
-                                }
-                                cameraProvider.unbindAll()
-                                cameraProvider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    selector,
-                                    preview
+                                JourneyBadgePill(
+                                    text = if (hasCameraPermission) "✓ Đã cấp" else "Chưa cấp",
+                                    containerColor = if (hasCameraPermission) colors.sage.copy(alpha = 0.18f) else colors.accentContainer,
+                                    contentColor = if (hasCameraPermission) colors.sage else colors.accent
                                 )
                             }
-                        }, ContextCompat.getMainExecutor(ctx))
-                        previewView
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else if (uiState.capturedImageUri != null) {
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = colors.elevatedSurface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (hasMicPermission) colors.sage else colors.border
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = null,
+                                        tint = if (hasMicPermission) colors.sage else colors.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "🎙️ Micro thu âm (Microphone)",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = colors.primaryText
+                                        )
+                                        Text(
+                                            text = "Thu âm thanh khi ấn giữ nút chụp 5–10 giây",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colors.secondaryText
+                                        )
+                                    }
+                                }
+                                JourneyBadgePill(
+                                    text = if (hasMicPermission) "✓ Đã cấp" else "Chưa cấp",
+                                    containerColor = if (hasMicPermission) colors.sage.copy(alpha = 0.18f) else colors.accentContainer,
+                                    contentColor = if (hasMicPermission) colors.sage else colors.accent
+                                )
+                            }
+                        }
+                    }
+
+                    JourneyButton(
+                        text = tr(
+                            lang,
+                            "🔓 Allow Camera & Microphone",
+                            "🔓 Cấp quyền Máy ảnh & Micro ngay"
+                        ),
+                        variant = JourneyButtonVariant.PRIMARY,
+                        onClick = {
+                            cameraAndMicPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.CAMERA,
+                                    Manifest.permission.RECORD_AUDIO
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        testTag = "request_camera_mic_permissions_btn"
+                    )
+
+                    if (permissionDeniedOnce) {
+                        JourneyButton(
+                            text = tr(
+                                lang,
+                                "⚙️ Open System Permission Settings",
+                                "⚙️ Mở Cài đặt quyền hệ thống"
+                            ),
+                            variant = JourneyButtonVariant.SECONDARY,
+                            onClick = {
+                                runCatching {
+                                    val intent = Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", context.packageName, null)
+                                    ).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "open_system_permission_settings_btn"
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        JourneyButton(
+                            text = tr(
+                                lang,
+                                "🖼️ Pick from Gallery",
+                                "🖼️ Chọn ảnh từ máy"
+                            ),
+                            variant = JourneyButtonVariant.SECONDARY,
+                            onClick = {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            testTag = "gate_pick_gallery_btn"
+                        )
+                        JourneyButton(
+                            text = tr(
+                                lang,
+                                "✨ Open Preview Mode",
+                                "✨ Mở khung ngắm mẫu"
+                            ),
+                            variant = JourneyButtonVariant.SECONDARY,
+                            onClick = {
+                                bypassPermissionGate = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            testTag = "bypass_permission_gate_btn"
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Khung ngắm vuông 1:1 bo góc tròn chuẩn Locket (Rounded Square Viewfinder)
+        if (!showPermissionGate) {
+            if (!isAllPermissionsGranted) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            bypassPermissionGate = false
+                            cameraAndMicPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.CAMERA,
+                                    Manifest.permission.RECORD_AUDIO
+                                )
+                            )
+                        }
+                        .testTag("permission_status_banner")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📷 Cam: ${if (hasCameraPermission) "Bật" else "Tắt"} · 🎙️ Mic: ${if (hasMicPermission) "Bật" else "Tắt"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.secondaryText
+                        )
+                        Text(
+                            text = "Cấp quyền đầy đủ →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.accent
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+                    .clip(RoundedCornerShape(36.dp))
+                    .background(JourneyPalette.DeepObsidian)
+                    .border(
+                        width = 3.dp,
+                        color = if (isRecordingVideo) Color(0xFFEF4444) else colors.accent.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(36.dp)
+                    )
+            ) {
+                if (!isPhotoCaptured && hasCameraPermission) {
+                    AndroidView(
+                        factory = { ctx ->
+                            val previewView = PreviewView(ctx).apply {
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                            }
+                            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                            cameraProviderFuture.addListener({
+                                runCatching {
+                                    val cameraProvider = cameraProviderFuture.get()
+                                    val preview = Preview.Builder().build().also {
+                                        it.setSurfaceProvider(previewView.surfaceProvider)
+                                    }
+                                    val selector = if (useFrontCamera) {
+                                        CameraSelector.DEFAULT_FRONT_CAMERA
+                                    } else {
+                                        CameraSelector.DEFAULT_BACK_CAMERA
+                                    }
+                                    cameraProvider.unbindAll()
+                                    cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        selector,
+                                        preview
+                                    )
+                                }
+                            }, ContextCompat.getMainExecutor(ctx))
+                            previewView
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (uiState.capturedImageUri != null) {
                 AsyncImage(
                     model = uiState.capturedImageUri,
                     contentDescription = place.nameVi,
@@ -266,37 +734,92 @@ fun AiCameraScreen(
                 )
             }
 
-            // Top badge inside Locket viewfinder
-            Surface(
-                shape = RoundedCornerShape(JourneyRadius.pill),
-                color = Color(0xAA0F172A),
+            // Top badge + Recording Progress Bar inside Locket viewfinder
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(14.dp)
-            ) {
-                Text(
-                    text = if (isPhotoCaptured) {
-                        tr(lang, "✨ Photo Ready to Post", "✨ Ảnh đã chụp — Sẵn sàng đăng")
-                    } else {
-                        "📍 ${place.nameVi}"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = JourneyPalette.Ivory,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-
-            // Bottom Caption Overlay inside Locket Viewfinder
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(14.dp)
             ) {
+                Surface(
+                    shape = RoundedCornerShape(JourneyRadius.pill),
+                    color = Color(0xAA0F172A)
+                ) {
+                    Text(
+                        text = when {
+                            isRecordingVideo -> "🔴 Đang quay video: ${recordedSeconds}s / 10s (Giữ 5–10s)"
+                            isPhotoCaptured && isVideoMode -> "🎥 Video ${recordedSeconds.coerceIn(5, 10)}s — Chọn quyền riêng tư & Đăng"
+                            isPhotoCaptured -> tr(lang, "✨ Photo Ready — Choose Privacy & Post", "✨ Ảnh đã chụp — Chọn quyền riêng tư & Đăng")
+                            else -> "🟢 Chạm chụp ảnh · Ấn giữ 5-10s quay video"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = JourneyPalette.Ivory,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+
+                if (isRecordingVideo) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { (recordedSeconds / 10f).coerceIn(0f, 1f) },
+                        color = Color(0xFFEF4444),
+                        trackColor = Color(0x44FFFFFF),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            }
+
+            // Bottom Automatic Date & Location Timestamp Stamp + Caption Overlay inside Locket Viewfinder
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xCC0F172A),
+                    border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("camera_date_location_watermark")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "📍 ${place.nameVi}, ${place.regionVi}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFF3E5AB)
+                            )
+                            Text(
+                                text = "🏷️ AUTO STAMP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.sage
+                            )
+                        }
+                        Text(
+                            text = "📅 $capturedTimestampText · 🧭 $activeCoordinatesText",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = JourneyPalette.Ivory
+                        )
+                    }
+                }
+
                 JourneyTextField(
                     value = captionText,
                     onValueChange = { captionText = it },
-                    label = tr(lang, "Locket Caption", "Ghi chú lên ảnh Locket"),
+                    label = tr(lang, "Locket Caption", "Ghi chú lên ảnh/video Locket"),
                     placeholder = tr(
                         lang,
                         "Write a caption for your friends...",
@@ -307,33 +830,137 @@ fun AiCameraScreen(
             }
         }
 
-        // 3. Cụm nút điều khiển Locket bên dưới khung ngắm
+        // 3. Cụm điều khiển: Sau khi chụp/quay xong thì hiển thị Chọn Quyền Riêng Tư + Nút Đăng
         if (isPhotoCaptured) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = colors.surface,
+                border = BorderStroke(1.dp, colors.border),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                JourneyButton(
-                    text = tr(lang, "Retake", "🔄 Chụp lại"),
-                    variant = JourneyButtonVariant.SECONDARY,
-                    onClick = {
-                        isPhotoCaptured = false
-                        onImagePicked(null)
-                    },
-                    modifier = Modifier.weight(1f),
-                    testTag = "locket_retake_btn"
-                )
-                JourneyButton(
-                    text = tr(lang, "🚀 Post to Feed", "🚀 Đăng lên Bảng tin"),
-                    variant = JourneyButtonVariant.PRIMARY,
-                    onClick = {
-                        onPublishLocketPost(captionText, place.id, uiState.capturedImageUri)
-                        captionText = ""
-                        isPhotoCaptured = false
-                    },
-                    modifier = Modifier.weight(1.5f),
-                    testTag = "locket_publish_btn"
-                )
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🔒 Quyền riêng tư (Ai được xem?)",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.primaryText
+                        )
+                        Text(
+                            text = computedPrivacyLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.sage
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            "PUBLIC" to "🌎 Tất cả bạn bè",
+                            "CUSTOM" to "👥 Chỉ cho ai đó",
+                            "PRIVATE" to "🔒 Chỉ mình tôi"
+                        ).forEach { (modeKey, label) ->
+                            val selected = privacyMode == modeKey
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) colors.sage.copy(alpha = 0.16f) else colors.elevatedSurface,
+                                border = BorderStroke(1.dp, if (selected) colors.sage else colors.border),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { privacyMode = modeKey }
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (selected) colors.sage else colors.secondaryText,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (privacyMode == "CUSTOM") {
+                        Text(
+                            text = "Chọn bạn bè được xem khoảnh khắc này:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondaryText
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            allFriends.forEach { friendName ->
+                                val isChosen = selectedFriends.contains(friendName)
+                                Surface(
+                                    shape = RoundedCornerShape(JourneyRadius.pill),
+                                    color = if (isChosen) colors.accent else colors.elevatedSurface,
+                                    border = BorderStroke(1.dp, if (isChosen) colors.accent else colors.border),
+                                    modifier = Modifier.clickable {
+                                        selectedFriends = if (isChosen && selectedFriends.size > 1) {
+                                            selectedFriends - friendName
+                                        } else {
+                                            selectedFriends + friendName
+                                        }
+                                    }
+                                ) {
+                                    Text(
+                                        text = "${if (isChosen) "✓" else "+"} $friendName",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isChosen) colors.onAccent else colors.primaryText,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        JourneyButton(
+                            text = tr(lang, "Retake", "🔄 Chụp lại"),
+                            variant = JourneyButtonVariant.SECONDARY,
+                            onClick = {
+                                isPhotoCaptured = false
+                                isVideoMode = false
+                                recordedSeconds = 0
+                                onImagePicked(null)
+                            },
+                            modifier = Modifier.weight(1f),
+                            testTag = "locket_retake_btn"
+                        )
+                        JourneyButton(
+                            text = tr(lang, "🚀 Post Now", "🚀 Đăng Locket"),
+                            variant = JourneyButtonVariant.PRIMARY,
+                            onClick = {
+                                val finalDuration = if (isVideoMode) recordedSeconds.coerceIn(5, 10) else 0
+                                onPublishLocketPost(
+                                    captionText,
+                                    place.id,
+                                    uiState.capturedImageUri,
+                                    computedPrivacyLabel,
+                                    isVideoMode,
+                                    finalDuration
+                                )
+                                captionText = ""
+                                isPhotoCaptured = false
+                                isVideoMode = false
+                                recordedSeconds = 0
+                            },
+                            modifier = Modifier.weight(1.5f),
+                            testTag = "locket_publish_btn"
+                        )
+                    }
+                }
             }
         } else {
             Row(
@@ -363,21 +990,78 @@ fun AiCameraScreen(
                     )
                 }
 
-                // Center: Prominent Circular Locket Shutter Button
+                // Center: Prominent Circular Locket Shutter Button (Tap = Photo, Hold = 5-10s Video)
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(82.dp)
+                        .size(84.dp)
                         .clip(CircleShape)
-                        .border(4.dp, colors.accent, CircleShape)
-                        .clickable { isPhotoCaptured = true }
+                        .border(
+                            width = 4.dp,
+                            color = if (isRecordingVideo) Color(0xFFEF4444) else colors.accent,
+                            shape = CircleShape
+                        )
+                        .pointerInput(hasCameraPermission, hasMicPermission, place.id) {
+                            detectTapGestures(
+                                onTap = {
+                                    if (!hasCameraPermission && !bypassPermissionGate) {
+                                        cameraAndMicPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.CAMERA,
+                                                Manifest.permission.RECORD_AUDIO
+                                            )
+                                        )
+                                    } else {
+                                        val freshTimestamp = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()).format(Date())
+                                        capturedTimestampText = freshTimestamp
+                                        val stampedUri = burnDateAndLocationStampOnBitmap(
+                                            context = context,
+                                            imageResId = place.imageRes,
+                                            sourceUriString = null,
+                                            locationLabel = "${place.nameVi}, ${place.regionVi}",
+                                            coordsLabel = activeCoordinatesText,
+                                            dateTimeLabel = freshTimestamp
+                                        )
+                                        if (stampedUri != null) {
+                                            onImagePicked(stampedUri)
+                                        }
+                                        isVideoMode = false
+                                        isPhotoCaptured = true
+                                    }
+                                },
+                                onLongPress = {
+                                    if (!hasMicPermission && !bypassPermissionGate) {
+                                        cameraAndMicPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.CAMERA,
+                                                Manifest.permission.RECORD_AUDIO
+                                            )
+                                        )
+                                    }
+                                    capturedTimestampText = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()).format(Date())
+                                    isRecordingVideo = true
+                                },
+                                onPress = {
+                                    tryAwaitRelease()
+                                    if (isRecordingVideo) {
+                                        isRecordingVideo = false
+                                        isVideoMode = true
+                                        if (recordedSeconds < 5) recordedSeconds = 5
+                                        isPhotoCaptured = true
+                                    }
+                                }
+                            )
+                        }
                         .padding(7.dp)
-                        .background(colors.primaryText, CircleShape)
+                        .background(
+                            if (isRecordingVideo) Color(0xFFEF4444) else colors.primaryText,
+                            CircleShape
+                        )
                         .testTag("camera_shutter_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Chụp ảnh Locket",
+                        contentDescription = "Chạm chụp ảnh hoặc ấn giữ quay video 5-10s",
                         tint = colors.primaryBackground,
                         modifier = Modifier.size(30.dp)
                     )
@@ -407,12 +1091,13 @@ fun AiCameraScreen(
             Text(
                 text = tr(
                     lang,
-                    "Tap the center circle to snap or pick a photo from gallery",
-                    "Chạm nút tròn ở giữa để chụp ngay hoặc chọn ảnh từ thư viện máy"
+                    "Tap once for photo · Hold 5–10s to record video",
+                    "👆 Chạm 1 lần để chụp ảnh · Ấn giữ nút tròn (5–10s) để quay video 🎥"
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.secondaryText
             )
+        }
         }
     }
 }

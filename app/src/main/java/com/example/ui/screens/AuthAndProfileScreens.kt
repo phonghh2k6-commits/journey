@@ -5,6 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -852,103 +854,175 @@ fun ProfileScreen(
                 shadowElevation = com.example.ui.theme.JourneyElevation.card,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // 1. Editable Avatar Circle
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Rich Cover Banner
                     Box(
-                        contentAlignment = Alignment.BottomEnd,
                         modifier = Modifier
-                            .size(96.dp)
-                            .clickable {
-                                avatarPickerLauncher.launch(
-                                    androidx.activity.result.PickVisualMediaRequest(
-                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                            .fillMaxWidth()
+                            .height(84.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        JourneyPalette.Midnight,
+                                        colors.sage,
+                                        colors.accent
                                     )
                                 )
-                            }
-                            .testTag("profile_avatar_picker_btn")
+                            )
+                    )
+
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // 1. Editable Avatar Circle
                         Box(
-                            contentAlignment = Alignment.Center,
+                            contentAlignment = Alignment.BottomEnd,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                                .background(colors.accentContainer, CircleShape)
-                                .border(2.5.dp, colors.accent, CircleShape)
-                        ) {
-                            if (avatarUri != null) {
-                                coil.compose.AsyncImage(
-                                    model = avatarUri,
-                                    contentDescription = name,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Text(
-                                    text = uiState.userInitials,
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    color = colors.accent
-                                )
-                            }
-                        }
-                        Surface(
-                            shape = CircleShape,
-                            color = colors.accent,
-                            border = BorderStroke(2.dp, colors.surface),
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.CameraAlt,
-                                    contentDescription = "Đổi ảnh đại diện",
-                                    tint = colors.onAccent,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = name,
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = colors.primaryText
-                        )
-                        Text(
-                            text = "$handle · $city",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.secondaryText
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        JourneyButton(
-                            text = tr(lang, "📷 Change Avatar", "📷 Đổi ảnh đại diện"),
-                            variant = JourneyButtonVariant.SECONDARY,
-                            onClick = {
-                                avatarPickerLauncher.launch(
-                                    androidx.activity.result.PickVisualMediaRequest(
-                                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                .size(96.dp)
+                                .clickable {
+                                    avatarPickerLauncher.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                        )
                                     )
-                                )
-                            }
-                        )
-                        if (avatarUri != null) {
-                            JourneyButton(
-                                text = tr(lang, "Use Initials", "Dùng chữ tắt"),
-                                variant = JourneyButtonVariant.GHOST,
-                                onClick = {
-                                    avatarUri = null
-                                    onUpdateProfile(name, handle, bio, city, email, null)
                                 }
+                                .testTag("profile_avatar_picker_btn")
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(colors.sage, CircleShape)
+                                    .border(3.dp, colors.accent, CircleShape)
+                            ) {
+                                if (avatarUri != null) {
+                                    coil.compose.AsyncImage(
+                                        model = avatarUri,
+                                        contentDescription = name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Text(
+                                        text = uiState.userInitials,
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = colors.accent,
+                                border = BorderStroke(2.dp, colors.surface),
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = "Đổi ảnh đại diện",
+                                        tint = colors.onAccent,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = colors.primaryText
+                            )
+                            Text(
+                                text = "$handle · 📍 $city",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.sage
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = bio,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.secondaryText
                             )
                         }
-                    }
 
-                    HorizontalDivider(color = colors.subtleBorder)
+                        // 3-Column Stats Bar
+                        val myPostsCount = uiState.socialPosts.count { it.isMine }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(colors.elevatedSurface)
+                                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "$myPostsCount",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = colors.primaryText
+                                )
+                                Text(
+                                    text = "Bài Locket",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.secondaryText
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "$myPostsCount",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = colors.primaryText
+                                )
+                                Text(
+                                    text = "Ảnh Check-in",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.secondaryText
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${uiState.places.size}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = colors.primaryText
+                                )
+                                Text(
+                                    text = "Điểm đến VN",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.secondaryText
+                                )
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            JourneyButton(
+                                text = tr(lang, "📷 Change Avatar", "📷 Đổi ảnh đại diện"),
+                                variant = JourneyButtonVariant.SECONDARY,
+                                onClick = {
+                                    avatarPickerLauncher.launch(
+                                        androidx.activity.result.PickVisualMediaRequest(
+                                            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                                        )
+                                    )
+                                }
+                            )
+                            if (avatarUri != null) {
+                                JourneyButton(
+                                    text = tr(lang, "Use Initials", "Dùng chữ tắt"),
+                                    variant = JourneyButtonVariant.GHOST,
+                                    onClick = {
+                                        avatarUri = null
+                                        onUpdateProfile(name, handle, bio, city, email, null)
+                                    }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = colors.subtleBorder)
 
                     // 2. Personal Information Fields
                     JourneyTextField(
@@ -1006,6 +1080,686 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxWidth(),
                         testTag = "profile_save_btn"
                     )
+
+                    HorizontalDivider(color = colors.subtleBorder)
+
+                    // 3. Locket Invite Link & Friends-List Component in Profile Section
+                    val cleanProfileHandle = handle.replace("@", "").trim().ifBlank { "minh.journey" }
+                    val personalInviteLink = "https://journey-locket.vn/?invite=$cleanProfileHandle"
+                    var copiedProfileLink by remember { mutableStateOf(false) }
+
+                    // Connected friends list & pending friend requests state (fetched on Profile load)
+                    var connectedFriends by remember {
+                        mutableStateOf(
+                            listOf(
+                                Triple("Lan Anh", "@lananh.vn", true to "Phố cổ Hội An · Đang hoạt động"),
+                                Triple("Đức Huy", "@duchuy.trek", true to "Đèo Mã Pí Lèng · Đang hoạt động"),
+                                Triple("Thảo Vy", "@thaovy.wander", false to "Đảo Phú Quốc · Hoạt động 12p trước"),
+                                Triple("Hoàng Minh", "@hoangminh.photo", true to "Đà Lạt · Đang hoạt động")
+                            )
+                        )
+                    }
+                    var pendingFriendRequests by remember {
+                        mutableStateOf(
+                            listOf(
+                                Triple("Khánh Linh", "@khanhlinh.food", "Hà Nội · Qua đường link kết bạn Locket"),
+                                Triple("Quốc Bảo", "@quocbao.camp", "Đà Nẵng · Bạn chung: Đức Huy")
+                            )
+                        )
+                    }
+                    var newFriendInput by remember { mutableStateOf("") }
+                    var showAddFriendField by remember { mutableStateOf(false) }
+                    var profileFriendNotice by remember { mutableStateOf<String?>(null) }
+                    var friendRequestToastSender by remember {
+                        mutableStateOf<Pair<String, String>?>(
+                            "Khánh Linh" to "@khanhlinh.food"
+                        )
+                    }
+                    var highlightPendingSection by remember { mutableStateOf(false) }
+
+                    // Toast Notification when receiving a new friend request, with action button to open Pending Requests
+                    if (friendRequestToastSender != null) {
+                        val (senderName, senderHandle) = friendRequestToastSender!!
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = Color(0xFF111923),
+                            border = BorderStroke(1.5.dp, Color(0xFFD4AF37)),
+                            shadowElevation = 4.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("friend_request_toast")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = tr(
+                                        lang,
+                                        "💌 New friend request from $senderName ($senderHandle)",
+                                        "💌 Lời mời kết bạn mới từ $senderName ($senderHandle)!"
+                                    ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE9E5DC),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(JourneyRadius.pill),
+                                    color = Color(0xFFF59E0B),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(JourneyRadius.pill))
+                                        .clickable {
+                                            highlightPendingSection = true
+                                            friendRequestToastSender = null
+                                        }
+                                        .testTag("toast_open_pending_requests_btn")
+                                ) {
+                                    Text(
+                                        text = tr(lang, "Open Pending →", "Xem lời mời →"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF111923),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "✕",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE9E5DC),
+                                    modifier = Modifier
+                                        .clickable { friendRequestToastSender = null }
+                                        .padding(4.dp)
+                                        .testTag("toast_dismiss_friend_request_btn")
+                                )
+                            }
+                        }
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_invite_link_card")
+                    ) {
+                        Text(
+                            text = tr(
+                                lang,
+                                "🔗 Locket Friend Invite Link",
+                                "🔗 Đường Link Kết Bạn Locket Của Bạn"
+                            ),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.primaryText
+                        )
+                        Text(
+                            text = tr(
+                                lang,
+                                "Share this link so friends can add you and message you on Locket.",
+                                "Gửi đường link này cho bạn bè để kết bạn và nhắn tin trực tiếp với bạn như Locket."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondaryText
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = colors.elevatedSurface,
+                            border = BorderStroke(1.dp, colors.accent),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = personalInviteLink,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.accent,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                JourneyButton(
+                                    text = if (copiedProfileLink) tr(lang, "✓ Copied", "✓ Đã chép")
+                                    else tr(lang, "📋 Copy Link", "📋 Sao chép"),
+                                    variant = JourneyButtonVariant.SECONDARY,
+                                    onClick = { copiedProfileLink = true },
+                                    testTag = "profile_copy_invite_link_btn"
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = colors.subtleBorder)
+
+                    // 4. `friends-list` UI Component in Profile Section with Pending Friend Requests & Searchable Filter
+                    var friendSearchQuery by remember { mutableStateOf("") }
+                    val normalizedFriendQuery = friendSearchQuery.trim().lowercase()
+                    val filteredConnectedFriends = connectedFriends.filter { (friendName, friendHandle, statusPair) ->
+                        if (normalizedFriendQuery.isEmpty()) {
+                            true
+                        } else {
+                            friendName.lowercase().contains(normalizedFriendQuery) ||
+                                friendHandle.lowercase().contains(normalizedFriendQuery) ||
+                                statusPair.second.lowercase().contains(normalizedFriendQuery)
+                        }
+                    }
+
+                    val onlineFriendsCount = connectedFriends.count { it.third.first }
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = colors.elevatedSurface,
+                        border = BorderStroke(1.dp, colors.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("friends_list")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                lang,
+                                                "👥 Connected Friends (${connectedFriends.size})",
+                                                "👥 Bạn bè đã kết nối (${connectedFriends.size})"
+                                            ),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.primaryText
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(JourneyRadius.pill),
+                                            color = Color(0x2222C55E),
+                                            border = BorderStroke(1.dp, Color(0x6622C55E))
+                                        ) {
+                                            Text(
+                                                text = "● $onlineFriendsCount Online",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFF16A34A),
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = tr(
+                                            lang,
+                                            "Friends sharing Lockets and direct messages with you",
+                                            "Danh sách bạn bè kết nối Locket & trạng thái trực tuyến"
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.secondaryText
+                                    )
+                                }
+
+                                JourneyButton(
+                                    text = tr(lang, "+ Add Friend", "+ Thêm bạn bè"),
+                                    variant = JourneyButtonVariant.PRIMARY,
+                                    onClick = {
+                                        val clean = newFriendInput.trim()
+                                        if (clean.isNotEmpty()) {
+                                            val rawHandle = clean.substringAfter("invite=", clean).replace("@", "").trim()
+                                            val display = rawHandle
+                                                .split(".", "_", "-")
+                                                .joinToString(" ") { part -> part.replaceFirstChar { it.uppercase() } }
+                                                .ifBlank { clean }
+                                            connectedFriends = listOf(
+                                                Triple(display, "@$rawHandle", true to "Việt Nam · Đang hoạt động")
+                                            ) + connectedFriends
+                                            newFriendInput = ""
+                                            profileFriendNotice = "🎉 Đã kết bạn với $display (@$rawHandle)!"
+                                        } else {
+                                            showAddFriendField = !showAddFriendField
+                                        }
+                                    },
+                                    testTag = "profile_add_friend_btn"
+                                )
+                            }
+
+                            // Pending Friend Requests Section inside friends-list
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = colors.surface,
+                                border = BorderStroke(
+                                    if (highlightPendingSection) 2.dp else 1.dp,
+                                    if (highlightPendingSection) Color(0xFFF59E0B) else colors.accent.copy(alpha = 0.55f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("pending_friend_requests_section")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = tr(
+                                                    lang,
+                                                    "💌 Pending Friend Requests (${pendingFriendRequests.size})",
+                                                    "💌 Lời mời kết bạn đang chờ (${pendingFriendRequests.size})"
+                                                ),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.primaryText
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(JourneyRadius.pill),
+                                                color = colors.accentContainer,
+                                                border = BorderStroke(1.dp, colors.accent)
+                                            ) {
+                                                Text(
+                                                    text = "${pendingFriendRequests.size}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.accent,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(JourneyRadius.pill),
+                                            color = colors.elevatedSurface,
+                                            border = BorderStroke(1.dp, colors.border),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(JourneyRadius.pill))
+                                                .clickable {
+                                                    val newReqName = "Bảo Ngọc"
+                                                    val newReqHandle = "@baongoc.wander"
+                                                    if (pendingFriendRequests.none { it.second == newReqHandle }) {
+                                                        pendingFriendRequests = listOf(
+                                                            Triple(
+                                                                newReqName,
+                                                                newReqHandle,
+                                                                "Đà Lạt · Qua đường link kết bạn Locket"
+                                                            )
+                                                        ) + pendingFriendRequests
+                                                    }
+                                                    friendRequestToastSender = newReqName to newReqHandle
+                                                }
+                                                .testTag("simulate_friend_request_btn")
+                                        ) {
+                                            Text(
+                                                text = tr(lang, "🔔 New Request", "🔔 Nhận lời mời mới"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.accent,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (pendingFriendRequests.isEmpty()) {
+                                        Text(
+                                            text = tr(
+                                                lang,
+                                                "✓ No pending friend requests.",
+                                                "✓ Không có lời mời kết bạn nào đang chờ xử lý."
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colors.secondaryText,
+                                            modifier = Modifier.testTag("pending_friend_requests_empty")
+                                        )
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            pendingFriendRequests.forEach { (reqName, reqHandle, reqMutual) ->
+                                                val cleanReqKey = reqHandle.replace("@", "")
+                                                val reqInitials = reqName
+                                                    .split(" ")
+                                                    .mapNotNull { it.firstOrNull()?.uppercase() }
+                                                    .take(2)
+                                                    .joinToString("")
+                                                    .ifBlank { "LM" }
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    color = colors.elevatedSurface,
+                                                    border = BorderStroke(1.dp, colors.border),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .testTag("pending_request_item_$cleanReqKey")
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                            modifier = Modifier.weight(1f)
+                                                        ) {
+                                                            Box(
+                                                                contentAlignment = Alignment.Center,
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(CircleShape)
+                                                                    .background(colors.accentContainer, CircleShape)
+                                                            ) {
+                                                                Text(
+                                                                    text = reqInitials,
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = colors.accent
+                                                                )
+                                                            }
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                                ) {
+                                                                    Text(
+                                                                        text = reqName,
+                                                                        style = MaterialTheme.typography.labelLarge,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = colors.primaryText
+                                                                    )
+                                                                    Text(
+                                                                        text = reqHandle,
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = colors.accent
+                                                                    )
+                                                                }
+                                                                Text(
+                                                                    text = "📍 $reqMutual",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = colors.secondaryText,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Surface(
+                                                                shape = RoundedCornerShape(JourneyRadius.pill),
+                                                                color = Color(0xFF16A34A),
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(JourneyRadius.pill))
+                                                                    .clickable {
+                                                                        pendingFriendRequests =
+                                                                            pendingFriendRequests.filterNot { it.first == reqName }
+                                                                        connectedFriends = listOf(
+                                                                            Triple(
+                                                                                reqName,
+                                                                                reqHandle,
+                                                                                true to "Vừa đồng ý kết bạn · Đang hoạt động"
+                                                                            )
+                                                                        ) + connectedFriends
+                                                                        profileFriendNotice =
+                                                                            "🤝 Đã chấp nhận lời mời kết bạn của $reqName ($reqHandle)!"
+                                                                    }
+                                                                    .testTag("accept_friend_request_btn_$cleanReqKey")
+                                                            ) {
+                                                                Text(
+                                                                    text = tr(lang, "✓ Accept", "✓ Đồng ý"),
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color.White,
+                                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                                )
+                                                            }
+
+                                                            Surface(
+                                                                shape = RoundedCornerShape(JourneyRadius.pill),
+                                                                color = Color(0x22EF4444),
+                                                                border = BorderStroke(1.dp, Color(0x66EF4444)),
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(JourneyRadius.pill))
+                                                                    .clickable {
+                                                                        pendingFriendRequests =
+                                                                            pendingFriendRequests.filterNot { it.first == reqName }
+                                                                        profileFriendNotice =
+                                                                            "Đã từ chối lời mời kết bạn của $reqName."
+                                                                    }
+                                                                    .testTag("decline_friend_request_btn_$cleanReqKey")
+                                                            ) {
+                                                                Text(
+                                                                    text = tr(lang, "✕ Decline", "✕ Từ chối"),
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color(0xFFEF4444),
+                                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Searchable Filter Bar for Friends-List
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    JourneyTextField(
+                                        value = friendSearchQuery,
+                                        onValueChange = { friendSearchQuery = it },
+                                        label = tr(
+                                            lang,
+                                            "🔍 Search friends by name",
+                                            "🔍 Tìm bạn bè theo tên hoặc @username"
+                                        ),
+                                        placeholder = tr(
+                                            lang,
+                                            "Type a friend's name (e.g. Lan Anh, Đức Huy)...",
+                                            "Nhập tên bạn bè (VD: Lan Anh, Đức Huy)..."
+                                        ),
+                                        testTag = "friends_search_filter_input"
+                                    )
+                                }
+                                if (friendSearchQuery.isNotBlank()) {
+                                    JourneyButton(
+                                        text = tr(lang, "✕ Clear", "✕ Xóa"),
+                                        variant = JourneyButtonVariant.SECONDARY,
+                                        onClick = { friendSearchQuery = "" },
+                                        testTag = "friends_search_clear_btn"
+                                    )
+                                }
+                            }
+
+                            if (showAddFriendField || newFriendInput.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        JourneyTextField(
+                                            value = newFriendInput,
+                                            onValueChange = { newFriendInput = it },
+                                            label = tr(lang, "Friend @username or invite link", "Nhập @username hoặc link kết bạn"),
+                                            placeholder = "@khanhlinh.vn",
+                                            testTag = "profile_add_friend_input"
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (profileFriendNotice != null) {
+                                Text(
+                                    text = profileFriendNotice!!,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.sage,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            // Connected Friend Items with Online Status Indicators
+                            if (filteredConnectedFriends.isEmpty()) {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = colors.surface,
+                                    border = BorderStroke(1.dp, colors.border),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("friends_search_empty_state")
+                                ) {
+                                    Text(
+                                        text = tr(
+                                            lang,
+                                            "🔍 No friends found matching \"$friendSearchQuery\".",
+                                            "🔍 Không tìm thấy bạn bè nào khớp với \"$friendSearchQuery\"."
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.secondaryText,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    filteredConnectedFriends.forEach { (friendName, friendHandle, statusPair) ->
+                                        val isOnline = statusPair.first
+                                        val statusSubtitle = statusPair.second
+                                        val initials = friendName
+                                            .split(" ")
+                                            .mapNotNull { it.firstOrNull()?.uppercase() }
+                                            .take(2)
+                                            .joinToString("")
+                                            .ifBlank { "BN" }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = colors.surface,
+                                            border = BorderStroke(1.dp, colors.border),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("profile_friend_item_${friendHandle.replace("@", "")}")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    // Avatar + Online Status Indicator Dot
+                                                    Box(modifier = Modifier.size(42.dp)) {
+                                                        Box(
+                                                            contentAlignment = Alignment.Center,
+                                                            modifier = Modifier
+                                                                .fillMaxSize()
+                                                                .clip(CircleShape)
+                                                                .background(colors.accentContainer, CircleShape)
+                                                                .border(1.dp, colors.accent, CircleShape)
+                                                        ) {
+                                                            Text(
+                                                                text = initials,
+                                                                style = MaterialTheme.typography.labelMedium,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = colors.accent
+                                                            )
+                                                        }
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(12.dp)
+                                                                .align(Alignment.BottomEnd)
+                                                                .clip(CircleShape)
+                                                                .background(
+                                                                    if (isOnline) Color(0xFF22C55E) else Color(0xFF94A3B8),
+                                                                    CircleShape
+                                                                )
+                                                                .border(2.dp, colors.surface, CircleShape)
+                                                                .testTag(
+                                                                    "friend_status_indicator_${friendHandle.replace("@", "")}"
+                                                                )
+                                                        )
+                                                    }
+
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = friendName,
+                                                                style = MaterialTheme.typography.labelLarge,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = colors.primaryText
+                                                            )
+                                                            Text(
+                                                                text = friendHandle,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = colors.accent
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = "📍 $statusSubtitle",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = colors.secondaryText,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(JourneyRadius.pill),
+                                                    color = if (isOnline) Color(0x2222C55E) else colors.elevatedSurface,
+                                                    border = BorderStroke(
+                                                        1.dp,
+                                                        if (isOnline) Color(0x6622C55E) else colors.border
+                                                    )
+                                                ) {
+                                                    Text(
+                                                        text = if (isOnline) "● Online" else "○ Offline",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (isOnline) Color(0xFF16A34A) else colors.secondaryText,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    }
                 }
             }
         }

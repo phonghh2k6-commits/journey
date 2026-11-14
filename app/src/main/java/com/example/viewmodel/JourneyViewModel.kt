@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class JourneyUiState(
     val currentScreen: JourneyScreenId = JourneyScreenId.B1_HOME_DASHBOARD,
@@ -148,14 +151,27 @@ class JourneyViewModel : ViewModel() {
         }
     }
 
-    fun publishLocketPost(caption: String, placeId: String, imageUri: String?) {
+    fun publishLocketPost(
+        caption: String,
+        placeId: String,
+        imageUri: String?,
+        privacyLabel: String = "🌎 Tất cả bạn bè",
+        isVideo: Boolean = false,
+        videoDurationSec: Int = 0
+    ) {
         _uiState.update { state ->
             val targetPlace = state.places.find { it.id == placeId } ?: state.selectedPlace
             val finalCaption = caption.trim().ifEmpty {
-                "Check-in khoảnh khắc tuyệt đẹp tại ${targetPlace.nameVi} ✨"
+                if (isVideo) "Video khoảnh khắc ${videoDurationSec}s tại ${targetPlace.nameVi} 🎥✨"
+                else "Check-in khoảnh khắc tuyệt đẹp tại ${targetPlace.nameVi} ✨"
             }
+            val nowDate = Date()
+            val formattedDateOnly = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(nowDate)
+            val formattedDateTime = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()).format(nowDate)
+            val activeCoords = state.liveGpsCoordinates?.takeIf { it.isNotBlank() } ?: targetPlace.coordinates
+            val sharedId = "moment_${System.currentTimeMillis()}"
             val newPost = SocialPostItem(
-                id = "post_${System.currentTimeMillis()}",
+                id = sharedId,
                 isMine = true,
                 authorName = state.userName,
                 authorHandle = state.userHandle,
@@ -163,24 +179,120 @@ class JourneyViewModel : ViewModel() {
                 placeId = targetPlace.id,
                 placeName = "${targetPlace.nameVi}, ${targetPlace.regionVi}",
                 timeAgo = "Vừa xong",
-                dateLabel = "Hôm nay",
+                dateLabel = formattedDateOnly,
                 caption = finalCaption,
                 photoRes = targetPlace.imageRes,
                 photoUri = imageUri,
                 likesCount = 1,
                 isLiked = true,
-                comments = emptyList()
+                comments = emptyList(),
+                privacyLabel = privacyLabel,
+                isVideo = isVideo,
+                videoDurationSec = videoDurationSec,
+                timestampWatermark = formattedDateTime,
+                coordinatesWatermark = activeCoords
             )
-            // Also mark place as visited/saved on map
+            val newMoment = DailyMoment(
+                id = sharedId,
+                dayNumber = 1,
+                timeLabel = formattedDateTime,
+                titleEn = targetPlace.nameEn,
+                titleVi = targetPlace.nameVi,
+                locationTag = "${targetPlace.nameVi}, ${targetPlace.regionVi}",
+                coordinates = activeCoords,
+                noteEn = finalCaption,
+                noteVi = finalCaption,
+                photoRes = targetPlace.imageRes,
+                weatherTag = if (isVideo) "🎥 Video ${videoDurationSec}s" else "📸 Locket"
+            )
+            val updatedTrips = state.trips.mapIndexed { idx, trip ->
+                if (idx == 0) trip.copy(moments = listOf(newMoment) + trip.moments, momentsCount = trip.moments.size + 1)
+                else trip
+            }
             val updatedPlaces = state.places.map { p ->
                 if (p.id == targetPlace.id) p.copy(isSaved = true) else p
             }
             state.copy(
                 socialPosts = listOf(newPost) + state.socialPosts,
+                trips = updatedTrips,
                 places = updatedPlaces,
                 capturedImageUri = null,
                 currentScreen = JourneyScreenId.B1_HOME_DASHBOARD,
-                toastBannerMessage = "🚀 Đã đăng ảnh lên Bảng tin & lưu vào Nhật ký Check-in!"
+                toastBannerMessage = "🚀 Đã đăng Locket ($privacyLabel) lên Bảng tin & Nhật ký!"
+            )
+        }
+    }
+
+    private var refreshPoolIndex = 0
+
+    fun refreshFriendsLocketFeed() {
+        _uiState.update { state ->
+            val nowDate = Date()
+            val formattedDateOnly = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(nowDate)
+            val formattedDateTime = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale.getDefault()).format(nowDate)
+
+            val candidatePlaces = state.places
+            val place = candidatePlaces.getOrElse(refreshPoolIndex % candidatePlaces.size.coerceAtLeast(1)) {
+                state.selectedPlace
+            }
+            val friendsPool = listOf(
+                Triple("Thảo Tiên", "@thaotien.trip", "TT") to "Săn mây buổi sớm tuyệt đẹp tại ${place.nameVi} 🌾☁️✨",
+                Triple("Tuấn Kiệt", "@kiet.photo", "TK") to "Nắng thu dịu nhẹ ghé thăm ${place.nameVi} ⛩️🍂",
+                Triple("Lan Anh", "@lananh.wander", "LA") to "Khoảnh khắc lung linh vừa chụp tại ${place.nameVi} 🏮💛",
+                Triple("Hoàng Nam", "@nam.explorer", "HN") to "Khám phá góc nhìn mới cực chất ở ${place.nameVi} ⛵🌊"
+            )
+            val (friendMeta, friendCaption) = friendsPool[refreshPoolIndex % friendsPool.size]
+            refreshPoolIndex += 1
+
+            val freshFriendPost = SocialPostItem(
+                id = "friend_refresh_${System.currentTimeMillis()}",
+                isMine = false,
+                authorName = friendMeta.first,
+                authorHandle = friendMeta.second,
+                avatarInitials = friendMeta.third,
+                placeId = place.id,
+                placeName = "${place.nameVi}, ${place.regionVi}",
+                timeAgo = "Vừa xong",
+                dateLabel = formattedDateOnly,
+                caption = friendCaption,
+                photoRes = place.imageRes,
+                photoUri = null,
+                likesCount = (18..54).random(),
+                isLiked = false,
+                comments = emptyList(),
+                privacyLabel = "🌎 Tất cả bạn bè",
+                isVideo = false,
+                videoDurationSec = 0,
+                timestampWatermark = formattedDateTime,
+                coordinatesWatermark = place.coordinates
+            )
+
+            val updatedPosts = listOf(freshFriendPost) + state.socialPosts.filterNot { it.caption == friendCaption }
+            state.copy(
+                socialPosts = updatedPosts.take(16),
+                toastBannerMessage = "✨ Đã tải Locket mới nhất từ ${friendMeta.first}!"
+            )
+        }
+    }
+
+    fun deleteMoment(itemId: String) {
+        _uiState.update { state ->
+            val targetPost = state.socialPosts.find { it.id == itemId }
+            val targetCaption = targetPost?.caption
+
+            val updatedPosts = state.socialPosts.filterNot { p ->
+                p.id == itemId || (p.isMine && targetCaption != null && p.caption == targetCaption)
+            }
+            val updatedTrips = state.trips.map { trip ->
+                val filteredMoments = trip.moments.filterNot { m ->
+                    m.id == itemId || (targetCaption != null && m.noteVi == targetCaption)
+                }
+                trip.copy(moments = filteredMoments, momentsCount = filteredMoments.size)
+            }
+            state.copy(
+                socialPosts = updatedPosts,
+                trips = updatedTrips,
+                toastBannerMessage = "🗑️ Đã xóa ảnh/video khỏi cả Trang chủ và Nhật ký!"
             )
         }
     }

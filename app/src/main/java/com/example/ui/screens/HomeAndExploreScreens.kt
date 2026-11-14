@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,9 +47,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,11 +61,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.R
 import com.example.model.JourneyScreenId
 import com.example.ui.components.JourneyBadgePill
@@ -99,13 +108,118 @@ fun HomeDashboardScreen(
     onSelectCollection: (String) -> Unit,
     onSetFeedFilter: (String) -> Unit = {},
     onToggleLikePost: (String) -> Unit = {},
-    onAddComment: (String, String) -> Unit = { _, _ -> }
+    onAddComment: (String, String) -> Unit = { _, _ -> },
+    onDeletePost: (String) -> Unit = {},
+    onRefreshFeed: () -> Unit = {}
 ) {
     val colors = JourneyTheme.colors
     val lang = uiState.language
+    val coroutineScope = rememberCoroutineScope()
+    val feedScrollState = rememberScrollState()
+    var isRefreshingFeed by remember { mutableStateOf(false) }
+    var pullDistancePx by remember { mutableFloatStateOf(0f) }
+
+    val triggerFeedRefresh: () -> Unit = {
+        if (!isRefreshingFeed) {
+            isRefreshingFeed = true
+            coroutineScope.launch {
+                delay(550L)
+                onRefreshFeed()
+                isRefreshingFeed = false
+                pullDistancePx = 0f
+            }
+        }
+    }
+
+    val pullToRefreshConnection = remember(feedScrollState, isRefreshingFeed) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < 0f && pullDistancePx > 0f) {
+                    val consumed = available.y.coerceAtLeast(-pullDistancePx)
+                    pullDistancePx = (pullDistancePx + consumed).coerceAtLeast(0f)
+                    return Offset(0f, consumed)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (source == NestedScrollSource.UserInput && available.y > 0f && feedScrollState.value == 0 && !isRefreshingFeed) {
+                    pullDistancePx = (pullDistancePx + available.y * 0.55f).coerceAtMost(220f)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullDistancePx >= 110f && !isRefreshingFeed) {
+                    triggerFeedRefresh()
+                } else if (!isRefreshingFeed) {
+                    pullDistancePx = 0f
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
     var activeStoryId by remember { mutableStateOf<String?>(null) }
     var commentingPostId by remember { mutableStateOf<String?>(null) }
     var commentDraft by remember { mutableStateOf("") }
+
+    // Locket Friends, Invite Link & Direct Messaging State
+    val cleanUserHandle = uiState.userHandle.replace("@", "").trim().ifBlank { "minh.journey" }
+    val myInviteLink = "https://journey-locket.vn/?invite=$cleanUserHandle"
+    var inviteCopiedFeedback by remember { mutableStateOf(false) }
+    var showFriendsAndChatHub by remember { mutableStateOf(false) }
+    var friendsHubTab by remember { mutableStateOf("FRIENDS") } // FRIENDS | REQUESTS | CHAT
+    var addFriendLinkOrHandle by remember { mutableStateOf("") }
+    var socialStatusBanner by remember { mutableStateOf<String?>(null) }
+
+    var locketFriends by remember {
+        mutableStateOf(
+            listOf(
+                Triple("Lan Anh", "@lananh.vn", "Đang ở Hội An · Online"),
+                Triple("Đức Huy", "@duchuy.trek", "Đang ở Hà Giang · Online"),
+                Triple("Thảo Vy", "@thaovy.wander", "Đang ở Phú Quốc · 12p trước"),
+                Triple("Hoàng Minh", "@hoangminh.photo", "Đang ở Đà Lạt · Online")
+            )
+        )
+    }
+    var pendingFriendRequests by remember {
+        mutableStateOf(
+            listOf(
+                Triple("Khánh Linh", "@khanhlinh.food", "Qua đường link kết bạn Locket"),
+                Triple("Quốc Bảo", "@quocbao.camp", "Bạn chung: Đức Huy")
+            )
+        )
+    }
+    var activeChatFriend by remember { mutableStateOf("Lan Anh") }
+    var directMessageInput by remember { mutableStateOf("") }
+    var chatMessagesByFriend by remember {
+        mutableStateOf(
+            mapOf(
+                "Lan Anh" to listOf(
+                    "Lan Anh: Cậu xem ảnh Locket đèn lồng Hội An tớ vừa chụp chưa? 🏮✨",
+                    "Bạn: Đẹp xuất sắc luôn! Tối nay đi thả hoa đăng nhé!",
+                    "Lan Anh: Ok chốt luôn nha! Nhắn tớ vị trí trên bản đồ nhé 📍"
+                ),
+                "Đức Huy" to listOf(
+                    "Đức Huy: Đèo Mã Pí Lèng hôm nay săn mây đỉnh lắm bro ⛰️🔥",
+                    "Bạn: Giữ ấm nhé, gửi thêm Locket về bảng tin cho anh em ngắm!"
+                ),
+                "Thảo Vy" to listOf(
+                    "Thảo Vy: Hoàng hôn Phú Quốc tím rịm luôn cậu ơi 🌅🍹"
+                ),
+                "Hoàng Minh" to listOf(
+                    "Hoàng Minh: Sáng mai săn mây Cầu Đất không bạn ơi? 🌲☕"
+                )
+            )
+        )
+    }
+    var quickReplyDraftByPost by remember { mutableStateOf( mapOf<String, String>() ) }
 
     val filteredPosts = uiState.socialPosts.filter { post ->
         when (uiState.socialFeedFilter) {
@@ -120,10 +234,62 @@ fun HomeDashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .nestedScroll(pullToRefreshConnection)
+            .verticalScroll(feedScrollState)
             .padding(bottom = 28.dp)
             .testTag("screen_b1_home_dashboard")
     ) {
+        // Pull-to-Refresh Banner at the top of the Home Feed
+        if (isRefreshingFeed || pullDistancePx > 14f) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .testTag("pull_to_refresh_banner")
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(JourneyRadius.pill),
+                    color = colors.surface,
+                    border = BorderStroke(1.5.dp, colors.accent),
+                    shadowElevation = JourneyElevation.card
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "🔄",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = when {
+                                isRefreshingFeed -> tr(
+                                    lang,
+                                    "Reloading latest Lockets from friends...",
+                                    "Đang tải Locket mới nhất từ bạn bè..."
+                                )
+                                pullDistancePx >= 110f -> tr(
+                                    lang,
+                                    "Release to reload friends' Lockets ✨",
+                                    "Thả tay để tải Locket mới nhất từ bạn bè ✨"
+                                )
+                                else -> tr(
+                                    lang,
+                                    "Pull down to refresh Locket feed...",
+                                    "Kéo xuống để làm mới bảng tin Locket..."
+                                )
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primaryText
+                        )
+                    }
+                }
+            }
+        }
+
         // 1. Thanh Tin 24h của Bạn bè & Của mình (Stories Strip)
         Column(
             modifier = Modifier
@@ -326,6 +492,489 @@ fun HomeDashboardScreen(
             }
         }
 
+        // 1A. Friend Request Toast Notification with Action Button to quickly open Pending Requests
+        if (pendingFriendRequests.isNotEmpty() && !showFriendsAndChatHub) {
+            val latestRequest = pendingFriendRequests.first()
+            Surface(
+                shape = RoundedCornerShape(JourneyRadius.pill),
+                color = Color(0xFF111923),
+                border = BorderStroke(1.5.dp, Color(0xFFD4AF37)),
+                shadowElevation = JourneyElevation.card,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = JourneySpacing.md, vertical = 4.dp)
+                    .testTag("home_friend_request_toast")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = tr(
+                            lang,
+                            "💌 New friend request from ${latestRequest.first} (${latestRequest.second})!",
+                            "💌 Lời mời kết bạn mới từ ${latestRequest.first} (${latestRequest.second})!"
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE9E5DC),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(JourneyRadius.pill),
+                        color = Color(0xFFF59E0B),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                            .clickable {
+                                friendsHubTab = "REQUESTS"
+                                showFriendsAndChatHub = true
+                            }
+                            .testTag("home_toast_open_pending_requests_btn")
+                    ) {
+                        Text(
+                            text = tr(lang, "Open Pending →", "Xem lời mời →"),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF111923),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 1B. Locket Friends, Invite Link & Direct Messaging Hub Card
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = colors.surface,
+            border = BorderStroke(1.5.dp, colors.accent.copy(alpha = 0.6f)),
+            shadowElevation = JourneyElevation.card,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md, vertical = 6.dp)
+                .testTag("locket_friends_invite_card")
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = tr(
+                                lang,
+                                "💛 Locket Friends & Direct Chat",
+                                "💛 Bạn Bè Locket & Nhắn Tin Trực Tiếp"
+                            ),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primaryText
+                        )
+                        Text(
+                            text = tr(
+                                lang,
+                                "${locketFriends.size} friends · ${pendingFriendRequests.size} requests · Share link to connect",
+                                "${locketFriends.size} bạn bè · ${pendingFriendRequests.size} lời mời · Chia sẻ link kết bạn"
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.secondaryText
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = colors.elevatedSurface,
+                            border = BorderStroke(1.dp, colors.border),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(JourneyRadius.pill))
+                                .clickable {
+                                    friendsHubTab = "FRIENDS"
+                                    showFriendsAndChatHub = !showFriendsAndChatHub
+                                }
+                                .testTag("btn_open_friends_hub")
+                        ) {
+                            Text(
+                                text = "👥 ${locketFriends.size}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.primaryText,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = colors.accent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(JourneyRadius.pill))
+                                .clickable {
+                                    friendsHubTab = "CHAT"
+                                    showFriendsAndChatHub = true
+                                }
+                                .testTag("btn_open_locket_chat")
+                        ) {
+                            Text(
+                                text = tr(lang, "💬 Locket Chat", "💬 Nhắn tin"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = JourneyPalette.DeepObsidian,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Invite Link Row (Copy & Share)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colors.elevatedSurface,
+                    border = BorderStroke(1.dp, colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🔗 $myInviteLink",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.accent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("my_locket_invite_link_text")
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = colors.accentContainer,
+                            border = BorderStroke(1.dp, colors.accent),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(JourneyRadius.pill))
+                                .clickable {
+                                    inviteCopiedFeedback = true
+                                    socialStatusBanner = "🔗 Đã sao chép link kết bạn: $myInviteLink"
+                                }
+                                .testTag("btn_copy_invite_link")
+                        ) {
+                            Text(
+                                text = if (inviteCopiedFeedback) tr(lang, "✓ Copied", "✓ Đã chép link")
+                                else tr(lang, "📋 Copy Link", "📋 Sao chép link"),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.accent,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (socialStatusBanner != null) {
+                    Text(
+                        text = socialStatusBanner!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.sage,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Expandable Friends, Pending Requests & Locket Chat Hub
+                if (showFriendsAndChatHub) {
+                    HorizontalDivider(color = colors.subtleBorder)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            "FRIENDS" to "👥 Bạn bè (${locketFriends.size})",
+                            "REQUESTS" to "➕ Lời mời (${pendingFriendRequests.size})",
+                            "CHAT" to "💬 Chat ($activeChatFriend)"
+                        ).forEach { (tabKey, tabLabel) ->
+                            JourneyFilterChip(
+                                label = tabLabel,
+                                selected = friendsHubTab == tabKey,
+                                onClick = { friendsHubTab = tabKey }
+                            )
+                        }
+                    }
+
+                    // Add friend via Invite Link or Username input
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            JourneyTextField(
+                                value = addFriendLinkOrHandle,
+                                onValueChange = { addFriendLinkOrHandle = it },
+                                label = tr(lang, "Paste friend invite link or @id", "Dán đường link kết bạn hoặc @id"),
+                                placeholder = "https://journey-locket.vn/?invite=...",
+                                testTag = "input_add_friend_link"
+                            )
+                        }
+                        JourneyButton(
+                            text = tr(lang, "+ Add", "+ Kết bạn"),
+                            variant = JourneyButtonVariant.PRIMARY,
+                            onClick = {
+                                val raw = addFriendLinkOrHandle.trim()
+                                if (raw.isNotEmpty()) {
+                                    val cleanCode = raw
+                                        .substringAfter("invite=", raw)
+                                        .replace("@", "")
+                                        .trim()
+                                    val displayName = cleanCode
+                                        .split(".", "_", "-")
+                                        .joinToString(" ") { part ->
+                                            part.replaceFirstChar { it.uppercase() }
+                                        }
+                                        .ifBlank { "Bạn Mới" }
+                                    locketFriends = listOf(
+                                        Triple(displayName, "@$cleanCode", "Vừa kết bạn qua Link Locket · Online")
+                                    ) + locketFriends
+                                    chatMessagesByFriend = chatMessagesByFriend + (
+                                        displayName to listOf(
+                                            "$displayName: Chào cậu! Mình vừa kết bạn qua đường link Locket của cậu 👋✨"
+                                        )
+                                    )
+                                    activeChatFriend = displayName
+                                    addFriendLinkOrHandle = ""
+                                    socialStatusBanner = "🎉 Đã kết bạn Locket với $displayName (@$cleanCode)!"
+                                }
+                            },
+                            testTag = "btn_add_friend_by_link"
+                        )
+                    }
+
+                    when (friendsHubTab) {
+                        "FRIENDS" -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                locketFriends.forEach { (friendName, friendHandle, friendStatus) ->
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = colors.elevatedSurface,
+                                        border = BorderStroke(1.dp, colors.border),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "$friendName ($friendHandle)",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.primaryText
+                                                )
+                                                Text(
+                                                    text = "🟢 $friendStatus",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = colors.secondaryText
+                                                )
+                                            }
+                                            Surface(
+                                                shape = RoundedCornerShape(JourneyRadius.pill),
+                                                color = colors.accentContainer,
+                                                border = BorderStroke(1.dp, colors.accent),
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(JourneyRadius.pill))
+                                                    .clickable {
+                                                        activeChatFriend = friendName
+                                                        friendsHubTab = "CHAT"
+                                                    }
+                                            ) {
+                                                Text(
+                                                    text = "💬 Nhắn tin",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.accent,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        "REQUESTS" -> {
+                            if (pendingFriendRequests.isEmpty()) {
+                                Text(
+                                    text = tr(lang, "No pending friend requests.", "Chưa có lời mời kết bạn mới."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.secondaryText
+                                )
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    pendingFriendRequests.forEach { (reqName, reqHandle, reqMutual) ->
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = colors.elevatedSurface,
+                                            border = BorderStroke(1.dp, colors.border),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = "$reqName ($reqHandle)",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = colors.primaryText
+                                                    )
+                                                    Text(
+                                                        text = reqMutual,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = colors.secondaryText
+                                                    )
+                                                }
+                                                Surface(
+                                                    shape = RoundedCornerShape(JourneyRadius.pill),
+                                                    color = colors.accent,
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(JourneyRadius.pill))
+                                                        .clickable {
+                                                            pendingFriendRequests = pendingFriendRequests.filterNot { it.first == reqName }
+                                                            locketFriends = listOf(
+                                                                Triple(reqName, reqHandle, "Vừa đồng ý kết bạn · Online")
+                                                            ) + locketFriends
+                                                            chatMessagesByFriend = chatMessagesByFriend + (
+                                                                reqName to listOf("$reqName: Yay! Mình đã là bạn bè Locket rồi nè 📸💛")
+                                                            )
+                                                            socialStatusBanner = "✅ Đã đồng ý kết bạn với $reqName!"
+                                                        }
+                                                ) {
+                                                    Text(
+                                                        text = "✓ Đồng ý",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = JourneyPalette.DeepObsidian,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        "CHAT" -> {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.testTag("locket_direct_chat_box")
+                            ) {
+                                // Friend selector pills
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    locketFriends.forEach { (friendName, _, _) ->
+                                        JourneyFilterChip(
+                                            label = "💬 $friendName",
+                                            selected = activeChatFriend == friendName,
+                                            onClick = { activeChatFriend = friendName }
+                                        )
+                                    }
+                                }
+
+                                // Messages history
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = colors.surface,
+                                    border = BorderStroke(1.dp, colors.border),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val messages = chatMessagesByFriend[activeChatFriend].orEmpty()
+                                        messages.takeLast(6).forEach { msg ->
+                                            val isMe = msg.startsWith("Bạn:")
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = if (isMe) colors.accentContainer else colors.elevatedSurface,
+                                                border = BorderStroke(
+                                                    1.dp,
+                                                    if (isMe) colors.accent else colors.border
+                                                ),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(
+                                                    text = msg,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = colors.primaryText,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Direct Message composer
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        JourneyTextField(
+                                            value = directMessageInput,
+                                            onValueChange = { directMessageInput = it },
+                                            label = tr(lang, "Message $activeChatFriend", "Nhắn tin cho $activeChatFriend"),
+                                            placeholder = "Gửi tin nhắn Locket...",
+                                            testTag = "input_locket_direct_message"
+                                        )
+                                    }
+                                    JourneyButton(
+                                        text = tr(lang, "Send", "Gửi"),
+                                        variant = JourneyButtonVariant.PRIMARY,
+                                        onClick = {
+                                            val cleanMsg = directMessageInput.trim()
+                                            if (cleanMsg.isNotEmpty()) {
+                                                val existing = chatMessagesByFriend[activeChatFriend].orEmpty()
+                                                chatMessagesByFriend = chatMessagesByFriend + (
+                                                    activeChatFriend to (existing + "Bạn: $cleanMsg")
+                                                )
+                                                directMessageInput = ""
+                                            }
+                                        },
+                                        testTag = "btn_send_locket_direct_message"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 2. Bộ lọc Bảng tin (Tất cả / Bạn bè / Của tôi)
         Row(
             modifier = Modifier
@@ -351,6 +1000,24 @@ fun HomeDashboardScreen(
                     label = label,
                     selected = uiState.socialFeedFilter == key,
                     onClick = { onSetFeedFilter(key) }
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(JourneyRadius.pill),
+                color = colors.accentContainer,
+                border = BorderStroke(1.dp, colors.accent),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(JourneyRadius.pill))
+                    .clickable { triggerFeedRefresh() }
+                    .testTag("btn_refresh_locket_feed")
+            ) {
+                Text(
+                    text = tr(lang, "🔄 Refresh", "🔄 Làm mới"),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.accent,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 )
             }
         }
@@ -433,6 +1100,19 @@ fun HomeDashboardScreen(
                                                 )
                                             }
                                         }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(JourneyRadius.pill),
+                                            color = colors.elevatedSurface,
+                                            border = BorderStroke(1.dp, colors.border)
+                                        ) {
+                                            Text(
+                                                text = post.privacyLabel,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = colors.secondaryText,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                            )
+                                        }
                                     }
                                     Text(
                                         text = "📍 ${post.placeName} · ${post.timeAgo}",
@@ -449,7 +1129,7 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        // Square Locket Photo with Overlaid Caption Pill
+                        // Square Locket Photo/Video with Overlaid Caption Pill
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -473,6 +1153,62 @@ fun HomeDashboardScreen(
                                 )
                             }
 
+                            // Top-Right Date & Location Timestamp Overlay Stamp on Photo
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xCC0F172A),
+                                border = BorderStroke(1.dp, Color(0x55D4AF37)),
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(10.dp)
+                                    .testTag("feed_post_timestamp_overlay_${post.id}")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text(
+                                        text = "📍 ${post.placeName}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFF3E5AB),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = buildString {
+                                            append("📅 ")
+                                            append(post.timestampWatermark.ifBlank { post.dateLabel })
+                                            if (post.coordinatesWatermark.isNotBlank()) {
+                                                append(" · ")
+                                                append(post.coordinatesWatermark)
+                                            }
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = JourneyPalette.Ivory,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            if (post.isVideo) {
+                                Surface(
+                                    shape = RoundedCornerShape(JourneyRadius.pill),
+                                    color = Color(0xCC0F172A),
+                                    border = BorderStroke(1.dp, Color(0x44FFFFFF)),
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = "🎥 Video Locket · ${post.videoDurationSec}s",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = JourneyPalette.Ivory,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
                             // Locket Overlaid Caption Pill
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
@@ -491,7 +1227,7 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        // Post Actions Bar (Like, Comment, View on Map)
+                        // Post Actions Bar (Like, Comment, View on Map, Delete)
                         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -531,31 +1267,114 @@ fun HomeDashboardScreen(
                                             .testTag("comment_btn_${post.id}")
                                     ) {
                                         Text(
-                                            text = "💬 ${post.comments.size} bình luận",
+                                            text = "💬 ${post.comments.size}",
                                             style = MaterialTheme.typography.labelLarge,
                                             color = colors.primaryText,
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                         )
                                     }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(JourneyRadius.pill),
+                                        color = colors.elevatedSurface,
+                                        border = BorderStroke(1.dp, colors.border),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                                            .clickable {
+                                                onSelectPlace(post.placeId, false)
+                                                onNavigate(JourneyScreenId.C1_EXPLORE_MAP)
+                                            }
+                                    ) {
+                                        Text(
+                                            text = tr(lang, "🗺️ Map", "🗺️ Bản đồ"),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = colors.accent,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
                                 }
 
-                                Surface(
-                                    shape = RoundedCornerShape(JourneyRadius.pill),
-                                    color = colors.elevatedSurface,
-                                    border = BorderStroke(1.dp, colors.border),
+                                if (post.isMine) {
+                                    Surface(
+                                        shape = RoundedCornerShape(JourneyRadius.pill),
+                                        color = Color(0x22DC2626),
+                                        border = BorderStroke(1.dp, Color(0x66DC2626)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                                            .clickable { onDeletePost(post.id) }
+                                            .testTag("delete_post_btn_${post.id}")
+                                    ) {
+                                        Text(
+                                            text = tr(lang, "🗑️ Delete", "🗑️ Xóa"),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = Color(0xFFEF4444),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Locket-style Quick Reply DM & Emoji Reaction Bar for Friends' Posts
+                            if (!post.isMine) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val postReplyDraft = quickReplyDraftByPost[post.id].orEmpty()
+                                Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(JourneyRadius.pill))
-                                        .clickable {
-                                            onSelectPlace(post.placeId, false)
-                                            onNavigate(JourneyScreenId.C1_EXPLORE_MAP)
-                                        }
+                                        .fillMaxWidth()
+                                        .testTag("locket_quick_reply_bar_${post.id}"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text(
-                                        text = tr(lang, "🗺️ Map", "🗺️ Bản đồ"),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = colors.accent,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
+                                    listOf("🔥", "😍", "❤️").forEach { emoji ->
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = colors.elevatedSurface,
+                                            border = BorderStroke(1.dp, colors.border),
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val existing = chatMessagesByFriend[displayAuthor].orEmpty()
+                                                    chatMessagesByFriend = chatMessagesByFriend + (
+                                                        displayAuthor to (existing + "Bạn: Đã thả $emoji vào Locket tại ${post.placeName}")
+                                                    )
+                                                    activeChatFriend = displayAuthor
+                                                    socialStatusBanner = "💬 Đã gửi $emoji vào hộp thư Locket của $displayAuthor!"
+                                                }
+                                        ) {
+                                            Text(
+                                                text = emoji,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                modifier = Modifier.padding(8.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(JourneyRadius.pill),
+                                        color = colors.accentContainer,
+                                        border = BorderStroke(1.dp, colors.accent),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                                            .clickable {
+                                                activeChatFriend = displayAuthor
+                                                friendsHubTab = "CHAT"
+                                                showFriendsAndChatHub = true
+                                            }
+                                            .testTag("btn_dm_friend_${post.id}")
+                                    ) {
+                                        Text(
+                                            text = if (postReplyDraft.isBlank()) {
+                                                tr(lang, "💬 Message $displayAuthor...", "💬 Nhắn tin Locket cho $displayAuthor...")
+                                            } else postReplyDraft,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.accent,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -792,6 +1611,23 @@ fun ExploreMapScreen(
     val lang = uiState.language
     val activePlace = uiState.selectedPlace
     val myCheckinsCount = uiState.socialPosts.count { it.isMine }
+    var mapLayerMode by remember { mutableStateOf("STANDARD") } // STANDARD | SATELLITE | TERRAIN
+    var mapZoomScale by remember { mutableStateOf(1.0f) } // 0.6f .. 2.2f
+    var mapSearchQuery by remember { mutableStateOf("") }
+    var visibleMapCategories by remember {
+        mutableStateOf(setOf("NATURE", "MUSEUMS", "RESTAURANTS"))
+    }
+
+    val filteredMapPlaces = remember(mapSearchQuery, uiState.places) {
+        val q = mapSearchQuery.trim().lowercase()
+        if (q.isEmpty()) emptyList()
+        else uiState.places.filter { place ->
+            place.nameVi.lowercase().contains(q) ||
+                place.nameEn.lowercase().contains(q) ||
+                place.regionVi.lowercase().contains(q) ||
+                place.regionEn.lowercase().contains(q)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -827,22 +1663,246 @@ fun ExploreMapScreen(
             )
         }
 
+        // 1A. Top Map Search Bar: Jump to specific cities or landmarks in Vietnam
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md, vertical = 4.dp)
+                .testTag("map_search_bar_container"),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                JourneyTextField(
+                    value = mapSearchQuery,
+                    onValueChange = { mapSearchQuery = it },
+                    label = tr(lang, "Search Vietnam City / Landmark", "Tìm thành phố, địa danh Việt Nam"),
+                    placeholder = tr(
+                        lang,
+                        "Ha Long, Ha Noi, Hoi An, Sa Pa...",
+                        "Vịnh Hạ Long, Hà Nội, Hội An, Sa Pa..."
+                    ),
+                    leadingIcon = Icons.Default.Search,
+                    testTag = "map_search_input",
+                    modifier = Modifier.weight(1f)
+                )
+                if (mapSearchQuery.isNotBlank()) {
+                    IconButton(
+                        onClick = { mapSearchQuery = "" },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("map_search_clear_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = tr(lang, "Clear search", "Xóa tìm kiếm"),
+                            tint = colors.secondaryText
+                        )
+                    }
+                }
+            }
+
+            // Live Search Results Dropdown when typing
+            if (mapSearchQuery.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(JourneyRadius.md),
+                    color = colors.surface,
+                    border = BorderStroke(1.dp, colors.accent),
+                    shadowElevation = JourneyElevation.card,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("map_search_suggestions")
+                ) {
+                    Column(modifier = Modifier.padding(6.dp)) {
+                        if (filteredMapPlaces.isEmpty()) {
+                            Text(
+                                text = tr(
+                                    lang,
+                                    "No matching landmark found. Try Ha Long, Hoi An, Ha Noi, or Sa Pa.",
+                                    "Không tìm thấy địa danh phù hợp. Hãy thử: Hạ Long, Hội An, Hà Nội, Sa Pa."
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.secondaryText,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        } else {
+                            filteredMapPlaces.forEach { place ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(JourneyRadius.sm))
+                                        .clickable {
+                                            onSelectPlace(place.id, false)
+                                            mapZoomScale = 1.5f
+                                            mapSearchQuery = ""
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                        .testTag("map_search_result_${place.id}"),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = colors.accent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = tr(lang, place.nameEn, place.nameVi),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = colors.primaryText
+                                            )
+                                            Text(
+                                                text = "${place.regionVi} • ${place.coordinates}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = colors.secondaryText
+                                            )
+                                        }
+                                    }
+                                    JourneyBadgePill(
+                                        text = tr(lang, "Jump →", "Đi tới →"),
+                                        containerColor = colors.accentContainer,
+                                        contentColor = colors.accent
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Quick-Jump Landmark Pills
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                uiState.places.forEach { place ->
+                    val isSelected = place.id == activePlace.id
+                    Surface(
+                        shape = RoundedCornerShape(JourneyRadius.pill),
+                        color = if (isSelected) colors.accent else colors.surface,
+                        border = BorderStroke(1.dp, if (isSelected) colors.accent else colors.border),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(JourneyRadius.pill))
+                            .clickable {
+                                onSelectPlace(place.id, false)
+                                mapZoomScale = 1.25f
+                            }
+                            .testTag("map_quick_jump_${place.id}")
+                    ) {
+                        Text(
+                            text = "📍 ${tr(lang, place.nameEn, place.nameVi)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSelected) colors.onAccent else colors.primaryText,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 1B. Map Layer Toggle Bar: Standard / Satellite / Terrain
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = JourneySpacing.md, vertical = 4.dp)
+                .testTag("map_layer_toggle_bar"),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = tr(lang, "Map Layer:", "Chế độ bản đồ:"),
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.primaryText
+            )
+            Surface(
+                shape = RoundedCornerShape(JourneyRadius.pill),
+                color = colors.surface,
+                border = BorderStroke(1.dp, colors.border)
+            ) {
+                Row(
+                    modifier = Modifier.padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf(
+                        Triple("STANDARD", "🗺️ Standard", "map_layer_standard"),
+                        Triple("SATELLITE", "🛰️ Satellite", "map_layer_satellite"),
+                        Triple("TERRAIN", "⛰️ Terrain", "map_layer_terrain")
+                    ).forEach { (layerKey, layerLabel, tag) ->
+                        val isActiveLayer = mapLayerMode == layerKey
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = if (isActiveLayer) colors.accent else Color.Transparent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(JourneyRadius.pill))
+                                .clickable { mapLayerMode = layerKey }
+                                .testTag(tag)
+                        ) {
+                            Text(
+                                text = layerLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isActiveLayer) colors.onAccent else colors.secondaryText,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
         // 2. Bản đồ những nơi đã đi / đã đến (Interactive Footprint Map)
+        val mapBgColor = when (mapLayerMode) {
+            "SATELLITE" -> Color(0xFF06151F)
+            "TERRAIN" -> Color(0xFF1A261E)
+            else -> JourneyPalette.DeepObsidian
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(370.dp)
                 .padding(horizontal = JourneySpacing.md)
                 .clip(RoundedCornerShape(JourneyRadius.xl))
-                .background(JourneyPalette.DeepObsidian)
+                .background(mapBgColor)
                 .border(1.dp, colors.border, RoundedCornerShape(JourneyRadius.xl))
         ) {
-            // Topographic Contour Lines & Visited Route Path
+            if (mapLayerMode == "SATELLITE") {
+                Image(
+                    painter = painterResource(id = activePlace.imageRes),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.28f,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Topographic Contour Lines / Satellite Grid / Standard Route Path
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
-                val gridColor = Color(0x26879A91)
-                val goldLine = Color(0x55B99B72)
+                val gridColor = when (mapLayerMode) {
+                    "SATELLITE" -> Color(0x3838BDF8)
+                    "TERRAIN" -> Color(0x40A3B18A)
+                    else -> Color(0x26879A91)
+                }
+                val goldLine = when (mapLayerMode) {
+                    "SATELLITE" -> Color(0x8838BDF8)
+                    "TERRAIN" -> Color(0x88D4A373)
+                    else -> Color(0x55B99B72)
+                }
 
                 for (i in 1..6) {
                     val x = w * (i / 7f)
@@ -855,13 +1915,15 @@ fun ExploreMapScreen(
 
                 val cx = w * activePlace.mapXPercent
                 val cy = h * activePlace.mapYPercent
-                for (r in 1..3) {
+                val ringCount = if (mapLayerMode == "TERRAIN") 5 else 3
+                val baseRadius = (if (mapLayerMode == "TERRAIN") 42f else 55f) * mapZoomScale
+                for (r in 1..ringCount) {
                     drawCircle(
                         color = goldLine,
-                        radius = (r * 55f),
+                        radius = (r * baseRadius),
                         center = Offset(cx, cy),
                         style = Stroke(
-                            width = 1.5f,
+                            width = (if (mapLayerMode == "TERRAIN") 2f else 1.5f) * mapZoomScale.coerceIn(0.8f, 1.5f),
                             pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
                         )
                     )
@@ -873,13 +1935,13 @@ fun ExploreMapScreen(
                         color = Color(0x99B99B72),
                         start = routePoints[k],
                         end = routePoints[k + 1],
-                        strokeWidth = 3.5f,
+                        strokeWidth = 3.5f * mapZoomScale.coerceIn(0.8f, 1.5f),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f)
                     )
                 }
             }
 
-            // Map Header Badge
+            // Map Header Badge + Active Layer Indicator + Vietnam Sovereignty Badges (Hoàng Sa & Trường Sa)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -888,21 +1950,190 @@ fun ExploreMapScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 JourneyBadgePill(
-                    text = tr(lang, "🗺️ VISITED FOOTPRINT MAP", "🗺️ BẢN ĐỒ NHỮNG NƠI ĐÃ ĐI"),
+                    text = when (mapLayerMode) {
+                        "SATELLITE" -> "🛰️ SATELLITE VIEW · VIỆT NAM"
+                        "TERRAIN" -> "⛰️ TERRAIN TOPO · VIỆT NAM"
+                        else -> tr(lang, "🇻🇳 STANDARD MAP · VIETNAM", "🇻🇳 BẢN ĐỒ VIỆT NAM (STANDARD)")
+                    },
                     containerColor = Color(0xCC111923),
                     contentColor = JourneyPalette.SandGold
                 )
             }
 
-            // Interactive Visited Pins on Map
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 48.dp, end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(JourneyRadius.pill),
+                    color = Color(0xD9DC2626),
+                    border = BorderStroke(1.dp, Color(0xFFFFD700))
+                ) {
+                    Text(
+                        text = "🇻🇳 QĐ. Hoàng Sa (Việt Nam)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(JourneyRadius.pill),
+                    color = Color(0xD9DC2626),
+                    border = BorderStroke(1.dp, Color(0xFFFFD700))
+                ) {
+                    Text(
+                        text = "🇻🇳 QĐ. Trường Sa (Việt Nam)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            // Dedicated Mobile-Accessible '+' and '-' Zoom Controls (48dp touch targets)
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xD90F172A),
+                border = BorderStroke(1.dp, JourneyPalette.SandGold.copy(alpha = 0.55f)),
+                shadowElevation = JourneyElevation.floating,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp)
+                    .testTag("map_zoom_controls_container")
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (mapZoomScale < 2.2f) Color(0x26FFFFFF) else Color.Transparent,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(enabled = mapZoomScale < 2.2f) {
+                                mapZoomScale = (mapZoomScale + 0.25f).coerceAtMost(2.2f)
+                            }
+                            .testTag("map_zoom_in_btn")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "+",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = if (mapZoomScale < 2.2f) Color.White else Color.White.copy(alpha = 0.38f)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "${(mapZoomScale * 5).toInt()}x",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = JourneyPalette.SandGold
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (mapZoomScale > 0.6f) Color(0x26FFFFFF) else Color.Transparent,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(enabled = mapZoomScale > 0.6f) {
+                                mapZoomScale = (mapZoomScale - 0.25f).coerceAtLeast(0.6f)
+                            }
+                            .testTag("map_zoom_out_btn")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "−",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = if (mapZoomScale > 0.6f) Color.White else Color.White.copy(alpha = 0.38f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Interactive Category Filter Overlay (Nature Spots / Museums / Restaurants)
+            Surface(
+                shape = RoundedCornerShape(JourneyRadius.pill),
+                color = Color(0xD90F172A),
+                border = BorderStroke(1.dp, JourneyPalette.SandGold.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 46.dp, start = 12.dp, end = 12.dp)
+                    .testTag("map_category_filter_overlay")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        Triple("NATURE", "🌿 Nature Spots", "map_filter_nature"),
+                        Triple("MUSEUMS", "🏛️ Museums", "map_filter_museums"),
+                        Triple("RESTAURANTS", "🍽️ Restaurants", "map_filter_restaurants")
+                    ).forEach { (catKey, catLabel, tag) ->
+                        val isCatVisible = visibleMapCategories.contains(catKey)
+                        Surface(
+                            shape = RoundedCornerShape(JourneyRadius.pill),
+                            color = if (isCatVisible) JourneyPalette.SandGold else Color(0x551C2934),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isCatVisible) JourneyPalette.Ivory else Color(0x44FFFFFF)
+                            ),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(JourneyRadius.pill))
+                                .clickable {
+                                    visibleMapCategories = if (isCatVisible) {
+                                        visibleMapCategories - catKey
+                                    } else {
+                                        visibleMapCategories + catKey
+                                    }
+                                }
+                                .testTag(tag)
+                        ) {
+                            Text(
+                                text = catLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCatVisible) JourneyPalette.Midnight else JourneyPalette.Ivory.copy(alpha = 0.65f),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Interactive Visited & Categorized Pins on Map
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 48.dp, start = 12.dp, end = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(top = 88.dp, start = 12.dp, end = 68.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                uiState.places.forEach { place ->
+                uiState.places.filter { place ->
+                    val placeCat = when (place.id) {
+                        "hanoi_temple", "hoian_ancient_town" -> "MUSEUMS"
+                        "halong_bay", "sapa_terraces" -> "NATURE"
+                        else -> "RESTAURANTS"
+                    }
+                    visibleMapCategories.contains(placeCat)
+                }.forEach { place ->
                     val isSelected = place.id == activePlace.id
+                    val catBadge = when (place.id) {
+                        "hanoi_temple", "hoian_ancient_town" -> "🏛️"
+                        "halong_bay", "sapa_terraces" -> "🌿"
+                        else -> "🍽️"
+                    }
                     Surface(
                         shape = RoundedCornerShape(JourneyRadius.pill),
                         color = if (isSelected) JourneyPalette.SandGold else Color(0xCC1C2934),
@@ -927,7 +2158,7 @@ fun ExploreMapScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = tr(lang, place.nameEn, place.nameVi),
+                                text = "$catBadge ${tr(lang, place.nameEn, place.nameVi)}",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = if (isSelected) JourneyPalette.Midnight else JourneyPalette.Ivory
                             )
@@ -936,6 +2167,33 @@ fun ExploreMapScreen(
                                 text = "✓ Đã đến",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isSelected) JourneyPalette.Midnight.copy(alpha = 0.8f) else JourneyPalette.SandGold
+                            )
+                        }
+                    }
+                }
+
+                if (visibleMapCategories.contains("RESTAURANTS")) {
+                    Surface(
+                        shape = RoundedCornerShape(JourneyRadius.pill),
+                        color = Color(0xCC1C2934),
+                        border = BorderStroke(1.dp, JourneyPalette.SandGold.copy(alpha = 0.6f)),
+                        shadowElevation = JourneyElevation.card,
+                        modifier = Modifier
+                            .clickable { onSelectPlace("hoian_ancient_town", false) }
+                            .testTag("map_pin_restaurant_special")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = tr(
+                                    lang,
+                                    "🍽️ Cha Ca La Vong & Hoi An Cao Lau",
+                                    "🍽️ Chả Cá Lã Vọng & Cao Lầu Hội An"
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = JourneyPalette.Ivory
                             )
                         }
                     }

@@ -77,14 +77,14 @@ fun JournalHomeScreen(
     uiState: JourneyUiState,
     onSelectTrip: (String) -> Unit,
     onNavigate: (JourneyScreenId) -> Unit,
-    onSelectPlace: (String, Boolean) -> Unit = { _, _ -> }
+    onSelectPlace: (String, Boolean) -> Unit = { _, _ -> },
+    onDeleteMoment: (String) -> Unit = {}
 ) {
     val colors = JourneyTheme.colors
     val lang = uiState.language
 
-    // Combine user's Locket posts + trip moments into a unified check-in photo gallery
+    // Source of truth: user's Locket posts (synchronized with Home feed)
     val myPosts = uiState.socialPosts.filter { it.isMine }
-    val allMoments = uiState.trips.flatMap { it.moments }
 
     Column(
         modifier = Modifier
@@ -103,8 +103,8 @@ fun JournalHomeScreen(
                     Text(
                         text = tr(
                             lang,
-                            "My Check-in Photos (${myPosts.size + allMoments.size})",
-                            "Nhật Ký Ảnh Đã Check-in (${myPosts.size + allMoments.size})"
+                            "My Check-in Photos (${myPosts.size})",
+                            "Nhật Ký Ảnh Đã Check-in (${myPosts.size})"
                         ),
                         style = MaterialTheme.typography.headlineMedium,
                         color = colors.primaryText
@@ -112,8 +112,8 @@ fun JournalHomeScreen(
                     Text(
                         text = tr(
                             lang,
-                            "All photos and places you have checked into",
-                            "Những bức ảnh và địa điểm bạn đã đặt chân tới"
+                            "Deleting a photo here also removes it from Home feed",
+                            "Khi xóa ảnh tại đây, bài đăng trên Trang chủ cũng được xóa đồng bộ"
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.secondaryText
@@ -130,23 +130,14 @@ fun JournalHomeScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 2-Column Grid of Locket Check-in Photos
-            val combinedItems = myPosts.map { post ->
-                Triple(post.placeName, post.caption, post.photoRes to post.photoUri) to post.dateLabel
-            } + allMoments.map { m ->
-                Triple(m.locationTag, m.titleVi, m.photoRes to (null as String?)) to m.timeLabel
-            }
-
-            combinedItems.chunked(2).forEach { rowItems ->
+            myPosts.chunked(2).forEach { rowItems ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    rowItems.forEach { (triple, dateStr) ->
-                        val (placeLabel, captionText, photoPair) = triple
-                        val (photoRes, photoUri) = photoPair
+                    rowItems.forEach { post ->
                         Surface(
                             shape = RoundedCornerShape(18.dp),
                             color = colors.surface,
@@ -163,17 +154,17 @@ fun JournalHomeScreen(
                                         .height(150.dp)
                                         .background(JourneyPalette.DeepObsidian)
                                 ) {
-                                    if (photoUri != null) {
+                                    if (post.photoUri != null) {
                                         coil.compose.AsyncImage(
-                                            model = photoUri,
-                                            contentDescription = placeLabel,
+                                            model = post.photoUri,
+                                            contentDescription = post.placeName,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
                                         )
                                     } else {
                                         Image(
-                                            painter = painterResource(id = photoRes),
-                                            contentDescription = placeLabel,
+                                            painter = painterResource(id = post.photoRes),
+                                            contentDescription = post.placeName,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize()
                                         )
@@ -182,20 +173,59 @@ fun JournalHomeScreen(
                                         shape = RoundedCornerShape(JourneyRadius.pill),
                                         color = Color(0xBF0F172A),
                                         modifier = Modifier
-                                            .align(Alignment.TopEnd)
+                                            .align(Alignment.TopStart)
                                             .padding(8.dp)
                                     ) {
                                         Text(
-                                            text = dateStr,
+                                            text = "📅 ${post.timestampWatermark.ifBlank { post.dateLabel }}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = JourneyPalette.Ivory,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                         )
                                     }
+
+                                    // Bottom Location & Coordinates Overlay Stamp on Photo
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(0xCC0F172A),
+                                        border = BorderStroke(1.dp, Color(0x55D4AF37)),
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "📍 ${post.placeName.take(22)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFF3E5AB),
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+
+                                    // Synchronized Delete Button (removes from both Journal & Home)
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color(0xCC0F172A),
+                                        border = BorderStroke(1.dp, Color(0x55EF4444)),
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp)
+                                            .size(28.dp)
+                                            .clickable { onDeleteMoment(post.id) }
+                                            .testTag("journal_delete_btn_${post.id}")
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = "🗑️",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    }
                                 }
                                 Column(modifier = Modifier.padding(10.dp)) {
                                     Text(
-                                        text = "📍 $placeLabel",
+                                        text = "📍 ${post.placeName}",
                                         style = MaterialTheme.typography.labelLarge,
                                         color = colors.accent,
                                         maxLines = 1,
@@ -203,7 +233,7 @@ fun JournalHomeScreen(
                                     )
                                     Spacer(modifier = Modifier.height(3.dp))
                                     Text(
-                                        text = captionText,
+                                        text = post.caption,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.secondaryText,
                                         maxLines = 2,

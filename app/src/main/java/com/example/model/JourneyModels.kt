@@ -704,7 +704,9 @@ object JourneySampleRepository {
             comments = listOf(
                 SocialCommentItem("Lan Anh", "Ảnh nét quá Minh ơi! Góc chụp đỉnh thật 😍"),
                 SocialCommentItem("Hoàng Nam", "Cuối tuần này mình cũng ra Hạ Long nè!")
-            )
+            ),
+            timestampWatermark = "14/11/2026 · 08:30",
+            coordinatesWatermark = "20.9101° N, 107.1839° E"
         ),
         SocialPostItem(
             id = "post_2",
@@ -723,7 +725,9 @@ object JourneySampleRepository {
             isLiked = false,
             comments = listOf(
                 SocialCommentItem("Thảo Tiên", "Nhớ món Cao lầu Hội An quá đi!")
-            )
+            ),
+            timestampWatermark = "14/11/2026 · 19:45",
+            coordinatesWatermark = "15.8771° N, 108.3260° E"
         ),
         SocialPostItem(
             id = "post_3",
@@ -740,7 +744,9 @@ object JourneySampleRepository {
             photoUri = null,
             likesCount = 45,
             isLiked = true,
-            comments = emptyList()
+            comments = emptyList(),
+            timestampWatermark = "13/11/2026 · 06:50",
+            coordinatesWatermark = "22.3264° N, 103.8315° E"
         ),
         SocialPostItem(
             id = "post_4",
@@ -757,7 +763,9 @@ object JourneySampleRepository {
             photoUri = null,
             likesCount = 51,
             isLiked = false,
-            comments = emptyList()
+            comments = emptyList(),
+            timestampWatermark = "12/11/2026 · 15:20",
+            coordinatesWatermark = "21.0287° N, 105.8356° E"
         )
     )
 }
@@ -793,6 +801,12 @@ data class SocialPostItem(
     val photoUri: String? = null,
     val likesCount: Int = 0,
     val isLiked: Boolean = false,
-    val comments: List<SocialCommentItem> = emptyList()
+    val comments: List<SocialCommentItem> = emptyList(),
+    val privacyLabel: String = "🌎 Tất cả bạn bè",
+    val isVideo: Boolean = false,
+    val videoDurationSec: Int = 0,
+    val timestampWatermark: String = "",
+    val coordinatesWatermark: String = ""
 )
+
 
